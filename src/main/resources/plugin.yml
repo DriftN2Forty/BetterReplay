@@ -1,0 +1,9 @@
+name: ${project.artifactId}
+main: ${mainClass}
+version: ${project.version}
+author: ${author}
+depend: [packetevents]
+api-version: 1.13
+commands:
+  replay:
+    description: Replay base command

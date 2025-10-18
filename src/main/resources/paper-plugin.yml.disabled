@@ -1,0 +1,10 @@
+name: Replay
+loader: me.justindevb.replay.Replay
+version: 1.0
+description: Replay plugin
+api-version: 1.21.8
+dependencies:
+  server:
+    PacketEvents:
+      load: BEFORE
+      required: true
