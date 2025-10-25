@@ -15,6 +15,8 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import io.github.retrooper.packetevents.util.SpigotReflectionUtil;
+import me.justindevb.replay.api.events.ReplayStartEvent;
+import me.justindevb.replay.api.events.ReplayStopEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -94,6 +96,8 @@ public class ReplaySession implements Listener, PacketListener {
 
         giveReplayControls(viewer);
 
+        Bukkit.getPluginManager().callEvent(new ReplayStartEvent(viewer, file, this));
+
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -154,6 +158,7 @@ public class ReplaySession implements Listener, PacketListener {
     }
 
     public void stop() {
+        Bukkit.getPluginManager().callEvent(new ReplayStopEvent(viewer, this));
         recordedEntities.values().forEach(RecordedEntity::destroy);
         recordedEntities.clear();
         viewer.sendMessage("Replay finished");

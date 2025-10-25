@@ -1,5 +1,7 @@
 package me.justindevb.replay;
 
+import me.justindevb.replay.api.events.RecordingStartEvent;
+import me.justindevb.replay.api.events.RecordingStopEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
@@ -26,6 +28,8 @@ public class RecorderManager {
 
         RecordingSession session = new RecordingSession(name, replay.getDataFolder(), players, durationSeconds);
         session.start();
+
+        Bukkit.getPluginManager().callEvent(new RecordingStartEvent(name, players, session, durationSeconds));
         activeSessions.put(name, session);
 
         if (tickTask == null) {
@@ -41,6 +45,8 @@ public class RecorderManager {
             return false;
 
         session.stop();
+
+        Bukkit.getPluginManager().callEvent(new RecordingStopEvent(session));
 
         if (activeSessions.isEmpty() && tickTask != null) {
             tickTask.cancel();
