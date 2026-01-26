@@ -1,11 +1,13 @@
 package me.justindevb.replay.api;
 
+import me.justindevb.replay.ReplaySession;
 import org.bukkit.entity.Player;
 
 import java.io.File;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 public interface ReplayManager {
 
@@ -33,10 +35,40 @@ public interface ReplayManager {
      */
     Collection<?> getActiveRecordings();
 
-    Optional<?> startReplay(File replayFile, Player viewer);
+    /**
+     * Start a replay
+     * @param viewer
+     * @return
+     */
+    //Optional<?> startReplay(File replayFile, Player viewer);
+    CompletableFuture<Optional<ReplaySession>> startReplay(String replayName, Player viewer);
+
+    /**
+     * Stop a replay
+     * @param replaySession
+     * @return
+     */
     boolean stopReplay(Object replaySession);
+
+    /**
+     * Collection of all active replays
+     * @return
+     */
     Collection<?> getActiveReplays();
 
-    List<String> listSavedReplays();
-    Optional<File> getSavedReplayFile(String name);
+    /**
+     * List of all saved replays
+     * @return
+     */
+  //  List<String> listSavedReplays();
+    CompletableFuture<List<String>> listSavedReplays();
+
+    /**
+     * Get a replay file
+     * @param name
+     * @return
+     */
+   // Optional<File> getSavedReplayFile(String name);
+    CompletableFuture<Optional<File>> getSavedReplayFile(String name);
+
 }

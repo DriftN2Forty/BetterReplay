@@ -1,7 +1,7 @@
 package me.justindevb.replay;
 
-import me.justindevb.replay.util.ReplayStorage;
-import me.justindevb.replay.util.SpawnFakePlayer;
+import me.justindevb.replay.util.ReplayObject;
+import me.justindevb.replay.util.storage.FileReplayStorage;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -10,23 +10,22 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 public class ReplayCommand implements CommandExecutor, TabCompleter {
     private final RecorderManager manager;
-    private final ReplayStorage storage;
+   // private final FileReplayStorage storage;
 
     public ReplayCommand(RecorderManager manager) {
         this.manager = manager;
-        this.storage = Replay.getInstance().getReplayStorage();
+     //   this.storage = Replay.getInstance().getReplayStorage();
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (!(sender instanceof Player p)) {
-            sender.sendMessage("Player only.");
+            sender.sendMessage("Must be a player to execute this command");
             return true;
         }
 
@@ -39,6 +38,10 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
 
         switch (args[0].toLowerCase()) {
             case "start" -> {
+                if (!p.hasPermission("replay.start")) {
+                    p.sendMessage("You do not have permission");
+                    return true;
+                }
                 if (args.length < 3) {
                     p.sendMessage("§cUsage: /replay start <name> <player1 player2 ...> [durationSeconds]");
                     return true;
@@ -79,17 +82,25 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
                 }
             }
             case "stop" -> {
+                if (!p.hasPermission("replay.stop")) {
+                    p.sendMessage("You do not have permission");
+                    return true;
+                }
                 if (args.length < 2) {
                     p.sendMessage("§c/replay stop <name>");
                     return true;
                 }
-                if (manager.stopSession(args[1])) {
+                if (manager.stopSession(args[1], true)) {
                     p.sendMessage("§aStopped recording session: " + args[1]);
                 } else {
                     p.sendMessage("§cNo active session with that name!");
                 }
             }
             case "play" -> {
+                if (!p.hasPermission("replay.play")) {
+                    p.sendMessage("You do not have permission");
+                    return true;
+                }
                 if (args.length < 2) {
                     p.sendMessage("§c/replay play <name>");
                     return true;
@@ -98,35 +109,85 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
             }
 
             case "list" -> {
-                List<String> replays = storage.listReplays();
+                if (!p.hasPermission("replay.list")) {
+                    p.sendMessage("You do not have permission");
+                    return true;
+                }
+                Replay.getInstance().getReplayStorage().listReplays().thenAccept(replays -> {
+                    Bukkit.getScheduler().runTask(Replay.getInstance(), () -> {
+                        if (replays.isEmpty()) {
+                            sender.sendMessage("No saved replays");
+                        } else {
+                            sender.sendMessage("Saved replays:");
+                            replays.forEach(name -> sender.sendMessage(" - " + name));
+                        }
+                    });
+                });
+
+
+              /*  List<String> replays = storage.listReplays();
                 if (replays.isEmpty())
                     sender.sendMessage("No saved replays");
                 else {
                     sender.sendMessage("Saved replays:");
                     replays.forEach(name -> sender.sendMessage(" - " + name));
                 }
+               */
             }
 
             case "delete" -> {
+                if (!p.hasPermission("replay.delete")) {
+                    p.sendMessage("You do not have permission");
+                    return true;
+                }
                 if (args.length < 2) {
                     sender.sendMessage("Usage: /replay delete <name>");
                     return true;
                 }
                 String name = args[1];
-                if (storage.deleteReplay(name))
+                ReplayObject replayObject = new ReplayObject(name, null, Replay.getInstance().getReplayStorage());
+                replayObject.delete()
+                        .thenCompose(success -> Replay.getInstance().getReplayStorage().listReplays()
+                                .thenApply(names -> {
+                                    Replay.getInstance().getReplayCache().setReplays(names);
+                                    return success;
+                                }))
+                        .thenAccept(success -> {
+                            Bukkit.getScheduler().runTask(Replay.getInstance(), () -> {
+                                if (success) {
+                                    p.sendMessage("§aDeleted replay: " + name);
+                                } else {
+                                    p.sendMessage("§cReplay not found: " + name);
+                                }
+                            });
+                        })
+                        .exceptionally(ex -> {
+                            ex.printStackTrace();
+                            Bukkit.getScheduler().runTask(Replay.getInstance(), () ->
+                                    p.sendMessage("§cFailed to delete replay: " + name));
+                            return null;
+                        });
+
+                /*  if (storage.deleteReplay(name))
                     sender.sendMessage("Deleted replay: " + name);
                 else
                     sender.sendMessage("Replay not found: " + name);
+               */
+
             }
 
             default -> sender.sendMessage("Unknown command");
 
-            case "test" -> {
+
+
+
+
+          /*  case "test" -> {
                 new SpawnFakePlayer(p.getUniqueId(), p.getName(), p.getLocation(), p);
 
                 return true;
             }
-
+*/
         }
         return true;
     }
@@ -134,15 +195,42 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command cmd, String alias, String[] args) {
         if (args.length == 1) {
-            return Arrays.asList("list", "delete", "play").stream()
+            List<String> completions = new ArrayList<>();
+
+            if (sender.hasPermission("replay.list")) completions.add("list");
+            if (sender.hasPermission("replay.delete")) completions.add("delete");
+            if (sender.hasPermission("replay.play")) completions.add("play");
+
+            return completions.stream()
                     .filter(s -> s.startsWith(args[0].toLowerCase()))
                     .toList();
-        } else if (args.length == 2 && (args[0].equalsIgnoreCase("delete") || args[0].equalsIgnoreCase("play"))) {
+        }
+        /*else if (args.length == 2 && args[0].equalsIgnoreCase("delete")) {
+            if (!sender.hasPermission("replay.delete")) return Collections.emptyList();
             return storage.listReplays().stream()
                     .filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))
                     .toList();
         }
+        else if (args.length == 2 && args[0].equalsIgnoreCase("play")) {
+            if (!sender.hasPermission("replay.play")) return Collections.emptyList();
+            return storage.listReplays().stream()
+                    .filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))
+                    .toList();
+
+        }
+         */
+        if (args.length == 2 && (args[0].equalsIgnoreCase("delete") || args[0].equalsIgnoreCase("play"))) {
+            if (!sender.hasPermission("replay." + args[0].toLowerCase())) return Collections.emptyList();
+
+            List<String> cachedReplays = Replay.getInstance().getReplayCache().getReplays();
+
+            return cachedReplays.stream()
+                    .filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))
+                    .toList();
+        }
+
 
         return Collections.emptyList();
     }
+
 }

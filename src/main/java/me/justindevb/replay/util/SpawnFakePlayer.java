@@ -1,9 +1,11 @@
 package me.justindevb.replay.util;
 
 import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.manager.server.ServerVersion;
 import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
 import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
 import com.github.retrooper.packetevents.protocol.entity.type.EntityTypes;
+import com.github.retrooper.packetevents.protocol.player.ClientVersion;
 import com.github.retrooper.packetevents.protocol.player.UserProfile;
 import com.github.retrooper.packetevents.util.MojangAPIUtil;
 import com.github.retrooper.packetevents.util.Vector3d;
@@ -60,8 +62,25 @@ public class SpawnFakePlayer {
 
         PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, spawnEntityPacket);
 
+       // List<EntityData<?>> skinMeta = new ArrayList<>();
+        //skinMeta.add(new EntityData<>(17, EntityDataTypes.BYTE, (byte) (0x01 | 0x02 | 0x04 | 0x08 | 0x10 | 0x20 | 0x40)));
         List<EntityData<?>> skinMeta = new ArrayList<>();
-        skinMeta.add(new EntityData<>(17, EntityDataTypes.BYTE, (byte) (0x01 | 0x02 | 0x04 | 0x08 | 0x10 | 0x20 | 0x40)));
+        int SKIN_LAYER_INDEX = PacketEvents.getAPI().getPlayerManager().getClientVersion(viewer).isNewerThanOrEquals(ClientVersion.V_1_21_9) ? 16 : 17;
+
+        byte skinFlags = (byte) (
+                0x01 | // cape
+                        0x02 | // jacket
+                        0x04 | // left sleeve
+                        0x08 | // right sleeve
+                        0x10 | // left pants
+                        0x20 | // right pants
+                        0x40   // hat
+        );
+        skinMeta.add(new EntityData<>(
+                SKIN_LAYER_INDEX,
+                EntityDataTypes.BYTE,
+                skinFlags
+        ));
 
         WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(entityId, skinMeta);
 

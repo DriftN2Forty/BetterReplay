@@ -7,6 +7,7 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBl
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import io.github.retrooper.packetevents.util.SpigotConversionUtil;
+import me.justindevb.replay.util.ReplayObject;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
@@ -29,6 +30,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class RecordingSession implements Listener, PacketListener {
 
@@ -70,7 +72,7 @@ public class RecordingSession implements Listener, PacketListener {
 
         // Stop automatically after duration
         if (durationTicks != -1 && tick >= durationTicks) {
-            stop();
+            stop(true);
             return;
         }
 
@@ -142,7 +144,6 @@ public class RecordingSession implements Listener, PacketListener {
         event.put("loc", serializeLocation(p.getLocation()));
         timeline.add(event);
 
-        e.setCancelled(true);
     }
 
 
@@ -284,16 +285,30 @@ public class RecordingSession implements Listener, PacketListener {
         timeline.add(event);
     }
 
-    public void stop() {
+    public void stop(boolean save) {
         if (stopped) return;
         stopped = true;
 
-        try (FileWriter writer = new FileWriter(file)) {
-            gson.toJson(timeline, writer);
-            Bukkit.getLogger().info("Recording saved to " + file.getAbsolutePath());
-        } catch (IOException e) {
-            e.printStackTrace();
+        trackedPlayers.clear();
+
+        if (save) {
+            ReplayObject replayObject = new ReplayObject(name, timeline, Replay.getInstance().getReplayStorage());
+            replayObject.save().thenRun(() ->
+                    Bukkit.getLogger().info("Recording " + name + " saved!")).exceptionally(ex -> {
+                        ex.printStackTrace();
+                        return null;
+            });
         }
+
+    /*    if (save) {
+            try (FileWriter writer = new FileWriter(file)) {
+                gson.toJson(timeline, writer);
+                Bukkit.getLogger().info("Recording saved to " + file.getAbsolutePath());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+     */
     }
 
     public boolean isStopped() {

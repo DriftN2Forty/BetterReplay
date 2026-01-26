@@ -39,7 +39,7 @@ import java.nio.file.Files;
 import java.util.*;
 
 public class ReplaySession implements Listener, PacketListener {
-    private final File file;
+    //private final File file;
     private final Player viewer;
     private final Replay replay;
     private final Gson gson = new Gson();
@@ -54,7 +54,106 @@ public class ReplaySession implements Listener, PacketListener {
     private ItemStack[] viewerArmor;
     private ItemStack viewerOffHand;
 
-    public ReplaySession(File file, Player viewer, Replay replay) {
+    public ReplaySession(List<Map<String, Object>> timeline, Player viewer, Replay replay) {
+        this.timeline = timeline;
+        this.viewer = viewer;
+        this.replay = replay;
+        Bukkit.getPluginManager().registerEvents(this, replay);
+    }
+
+    public void start() {
+        if (timeline == null || timeline.isEmpty()) {
+            viewer.sendMessage("Replay is empty!");
+            return;
+        }
+
+        ReplayRegistry.add(this);
+        copyInventory();
+        Map<String, Object> firstLocationEvent = timeline.stream()
+                .filter(e -> e.containsKey("x") && e.containsKey("y") && e.containsKey("z"))
+                .findFirst()
+                .orElse(null);
+
+        if (firstLocationEvent != null) {
+            Double x = asDouble(firstLocationEvent.get("x"));
+            Double y = asDouble(firstLocationEvent.get("y"));
+            Double z = asDouble(firstLocationEvent.get("z"));
+            Float yaw = asFloat(firstLocationEvent.get("yaw"));
+            Float pitch = asFloat(firstLocationEvent.get("pitch"));
+
+            if (x != null && y != null && z != null) {
+                viewer.teleport(new Location(viewer.getWorld(), x, y, z, yaw, pitch));
+            }
+        }
+
+        giveReplayControls(viewer);
+
+     //   Bukkit.getPluginManager().callEvent(new ReplayStartEvent(viewer, file, this));
+
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (tick >= timeline.size()) {
+                    cancel();
+                    stop();
+                    return;
+                }
+
+                if (viewer == null || !viewer.isOnline()) {
+                    cancel();
+                    recordedEntities.values().forEach(RecordedEntity::destroy);
+                    recordedEntities.clear();
+                    return;
+                }
+
+                Map<String, Object> event = timeline.get(tick);
+
+                // Validate UUID
+                Object uuidObj = event.get("uuid");
+                if (!(uuidObj instanceof String)) {
+                    tick++;
+                    System.out.println("malformed event: uuid missing");
+                    return;
+                }
+                UUID uuid = UUID.fromString((String) event.get("uuid"));
+                RecordedEntity recorded = recordedEntities.computeIfAbsent(uuid, id -> {
+                    Double x = asDouble(event.get("x")), y = asDouble(event.get("y")), z = asDouble(event.get("z"));
+                    if (x == null || y == null || z == null) return null; // skip if missing coordinates
+
+                    Location initialLoc = new Location(viewer.getWorld(), x, y, z,
+                            asFloat(event.get("yaw")), asFloat(event.get("pitch")));
+
+                    RecordedEntity entity = RecordedEntityFactory.create(event, viewer);
+                    if (entity == null) {
+                        System.out.println("Malformed event: missing or invalid entity type for UUID " + uuid);
+                        return null;
+                    }
+
+                    entity.spawn(initialLoc);
+                    if (entity instanceof RecordedPlayer rp) {
+                        // Pull tick 0 inventory from timeline
+                        Map<String, Object> tick0Inventory = getInventorySnapshotForPlayer(uuid);
+                        if (tick0Inventory != null) {
+                            rp.updateInventory(tick0Inventory); // This sends the equipment packet
+                        }
+                    }
+
+                    return entity;
+                });
+
+                if (recorded != null) handleEvent(recorded, event);
+
+                if (!paused)
+                    tick++;
+            }
+        }.runTaskTimer(replay, 1L, 1L);
+
+
+    }
+
+
+
+/*  public ReplaySession(File file, Player viewer, Replay replay) {
         this.file = file;
         this.viewer = viewer;
         this.replay = replay;
@@ -156,6 +255,7 @@ public class ReplaySession implements Listener, PacketListener {
             }
         }.runTaskTimer(replay, 1L, 1L);
     }
+    */
 
     public void stop() {
         Bukkit.getPluginManager().callEvent(new ReplayStopEvent(viewer, this));
