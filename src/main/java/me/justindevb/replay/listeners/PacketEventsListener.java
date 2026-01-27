@@ -33,7 +33,6 @@ public class PacketEventsListener implements PacketListener {
         RecordedEntity clicked = ReplayRegistry.getEntityById(entityId);
 
         if (clicked == null) {
-            System.out.println("entity = null");
             return;
         }
 

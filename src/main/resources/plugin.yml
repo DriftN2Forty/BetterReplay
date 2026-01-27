@@ -7,3 +7,24 @@ api-version: 1.13
 commands:
   replay:
     description: Replay base command
+
+permissions:
+  replay.*:
+    description: Gives access to all replay commands
+    children:
+      replay.start: true
+      replay.stop: true
+      replay.list: true
+      replay.delete: true
+  replay.start:
+    description: Allows starting a new recording
+    default: op
+  replay.stop:
+    description: Allows stopping an active recording
+    default: op
+  replay.list:
+    description: Allows listing saved replays
+    default: true
+  replay.delete:
+    description: Allows deleting saved replays
+    default: op

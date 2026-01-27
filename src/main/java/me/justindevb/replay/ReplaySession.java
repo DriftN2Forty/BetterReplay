@@ -17,20 +17,27 @@ import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import io.github.retrooper.packetevents.util.SpigotReflectionUtil;
 import me.justindevb.replay.api.events.ReplayStartEvent;
 import me.justindevb.replay.api.events.ReplayStopEvent;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.io.File;
@@ -39,22 +46,125 @@ import java.nio.file.Files;
 import java.util.*;
 
 public class ReplaySession implements Listener, PacketListener {
-    private final File file;
+    //private final File file;
     private final Player viewer;
     private final Replay replay;
     private final Gson gson = new Gson();
+
+    private int replayTaskId = -1;
 
     private List<Map<String, Object>> timeline;
     private List<Integer> trackedEntityIds = new ArrayList<>();
     Map<UUID, RecordedEntity> recordedEntities = new HashMap<>();
     private int tick = 0;
     private boolean paused = false;
-    private final Set<Integer> controlSlots = Set.of(0, 1, 2);
     private ItemStack[] viewerInventory;
     private ItemStack[] viewerArmor;
     private ItemStack viewerOffHand;
 
-    public ReplaySession(File file, Player viewer, Replay replay) {
+    public ReplaySession(List<Map<String, Object>> timeline, Player viewer, Replay replay) {
+        this.timeline = timeline;
+        this.viewer = viewer;
+        this.replay = replay;
+        Bukkit.getPluginManager().registerEvents(this, replay);
+    }
+
+    public void start() {
+        if (timeline == null || timeline.isEmpty()) {
+            viewer.sendMessage("Replay is empty!");
+            return;
+        }
+
+        ReplayRegistry.add(this);
+        copyInventory();
+        Map<String, Object> firstLocationEvent = timeline.stream()
+                .filter(e -> e.containsKey("x") && e.containsKey("y") && e.containsKey("z"))
+                .findFirst()
+                .orElse(null);
+
+        if (firstLocationEvent != null) {
+            Double x = asDouble(firstLocationEvent.get("x"));
+            Double y = asDouble(firstLocationEvent.get("y"));
+            Double z = asDouble(firstLocationEvent.get("z"));
+            Float yaw = asFloat(firstLocationEvent.get("yaw"));
+            Float pitch = asFloat(firstLocationEvent.get("pitch"));
+
+            if (x != null && y != null && z != null) {
+                viewer.teleport(new Location(viewer.getWorld(), x, y, z, yaw, pitch));
+            }
+        }
+
+        giveReplayControls(viewer);
+
+     //   Bukkit.getPluginManager().callEvent(new ReplayStartEvent(viewer, file, this));
+
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                replayTaskId = getTaskId();
+                if (tick >= timeline.size()) {
+                    cancel();
+                    stop();
+                    return;
+                }
+
+                if (viewer == null || !viewer.isOnline()) {
+                    cancel();
+                    recordedEntities.values().forEach(RecordedEntity::destroy);
+                    recordedEntities.clear();
+                    return;
+                }
+
+                Map<String, Object> event = timeline.get(tick);
+
+                // Validate UUID
+                Object uuidObj = event.get("uuid");
+                if (!(uuidObj instanceof String)) {
+                    tick++;
+                    System.out.println("malformed event: uuid missing");
+                    return;
+                }
+                UUID uuid = UUID.fromString((String) event.get("uuid"));
+                RecordedEntity recorded = recordedEntities.computeIfAbsent(uuid, id -> {
+                    Double x = asDouble(event.get("x")), y = asDouble(event.get("y")), z = asDouble(event.get("z"));
+                    if (x == null || y == null || z == null) return null; // skip if missing coordinates
+
+                    Location initialLoc = new Location(viewer.getWorld(), x, y, z,
+                            asFloat(event.get("yaw")), asFloat(event.get("pitch")));
+
+                    RecordedEntity entity = RecordedEntityFactory.create(event, viewer);
+                    if (entity == null) {
+                        System.out.println("Malformed event: missing or invalid entity type for UUID " + uuid);
+                        return null;
+                    }
+
+                    entity.spawn(initialLoc);
+                    if (entity instanceof RecordedPlayer rp) {
+                        // Pull tick 0 inventory from timeline
+                        Map<String, Object> tick0Inventory = getInventorySnapshotForPlayer(uuid);
+                        if (tick0Inventory != null) {
+                            rp.updateInventory(tick0Inventory); // This sends the equipment packet
+                        }
+                    }
+
+                    return entity;
+                });
+
+                if (recorded != null) handleEvent(recorded, event);
+
+                if (!paused)
+                    tick++;
+
+                sendActionBar();
+            }
+        }.runTaskTimer(replay, 1L, 1L);
+
+
+    }
+
+
+
+/*  public ReplaySession(File file, Player viewer, Replay replay) {
         this.file = file;
         this.viewer = viewer;
         this.replay = replay;
@@ -156,14 +266,26 @@ public class ReplaySession implements Listener, PacketListener {
             }
         }.runTaskTimer(replay, 1L, 1L);
     }
+    */
 
     public void stop() {
+        viewer.sendActionBar(Component.empty());
+
         Bukkit.getPluginManager().callEvent(new ReplayStopEvent(viewer, this));
         recordedEntities.values().forEach(RecordedEntity::destroy);
+        clearFakeItems();
         recordedEntities.clear();
+
+        if (replayTaskId != -1) {
+            Bukkit.getScheduler().cancelTask(replayTaskId);
+            replayTaskId = -1;
+        }
+
         viewer.sendMessage("Replay finished");
 
         ReplayRegistry.remove(this);
+
+        HandlerList.unregisterAll(this);
 
         restoreInventory();
 
@@ -253,7 +375,6 @@ public class ReplaySession implements Listener, PacketListener {
         }
     }
 
-    // Helpers
     private Double asDouble(Object obj) {
         return obj instanceof Number n ? n.doubleValue() : null;
     }
@@ -263,35 +384,39 @@ public class ReplaySession implements Listener, PacketListener {
     }
 
     private void giveReplayControls(Player viewer) {
-        ItemStack[] items = new ItemStack[3];
 
-        // Create items in order
         ItemStack pauseButton = new ItemStack(Material.REDSTONE_BLOCK);
         ItemMeta pauseMeta = pauseButton.getItemMeta();
         pauseMeta.setDisplayName("§cPause / Play");
         pauseButton.setItemMeta(pauseMeta);
-        items[0] = pauseButton;
 
         ItemStack skipForward = new ItemStack(Material.LIME_CONCRETE);
         ItemMeta forwardMeta = skipForward.getItemMeta();
         forwardMeta.setDisplayName("§a+5 seconds");
         skipForward.setItemMeta(forwardMeta);
-        items[1] = skipForward;
 
         ItemStack skipBackward = new ItemStack(Material.YELLOW_CONCRETE);
         ItemMeta backwardMeta = skipBackward.getItemMeta();
         backwardMeta.setDisplayName("§e-5 seconds");
         skipBackward.setItemMeta(backwardMeta);
-        items[2] = skipBackward;
 
-        // Assign items to slots in order
-        int i = 0;
-        for (int slot : controlSlots) {
-            if (i >= items.length)
-                break;
-            viewer.getInventory().setItem(slot, items[i]);
-            i++;
-        }
+        ItemStack stopReplay = new ItemStack(Material.BARRIER);
+        ItemMeta stopMeta = stopReplay.getItemMeta();
+        stopMeta.setDisplayName("§4Exit Replay");
+        stopReplay.setItemMeta(stopMeta);
+
+        ItemStack playerMenu = new ItemStack(Material.PLAYER_HEAD);
+        ItemMeta menuMeta = playerMenu.getItemMeta();
+        menuMeta.setDisplayName("§bPlayers");
+        playerMenu.setItemMeta(menuMeta);
+
+        viewer.getInventory().setItem(4, pauseButton);
+        viewer.getInventory().setItem(5, skipForward);
+        viewer.getInventory().setItem(3, skipBackward);
+        viewer.getInventory().setItem(6, playerMenu);
+        viewer.getInventory().setItem(8, stopReplay);
+
+        viewer.getInventory().setHeldItemSlot(4);
     }
 
 
@@ -299,7 +424,6 @@ public class ReplaySession implements Listener, PacketListener {
         if (timeline.isEmpty()) return null;
         Map<String, Object> firstEvent = timeline.get(0);
 
-        // Only return the inventory part if it matches the UUID
         if (!uuid.toString().equals(firstEvent.get("uuid")))
             return null;
 
@@ -317,7 +441,7 @@ public class ReplaySession implements Listener, PacketListener {
     public void onPlayerInteract(PlayerInteractEvent e) {
         Player player = e.getPlayer();
         if (!player.equals(this.viewer))
-            return; // Only for the replay viewer
+            return;
 
         ItemStack handItem = e.getItem();
         if (handItem == null || !handItem.hasItemMeta())
@@ -329,9 +453,11 @@ public class ReplaySession implements Listener, PacketListener {
             case "§cPause / Play" -> togglePause();
             case "§a+5 seconds" -> skipSeconds(5);
             case "§e-5 seconds" -> skipSeconds(-5);
+            case "§4Exit Replay" -> stop();
+            case "§bPlayers" -> openPlayerMenu();
         }
 
-        e.setCancelled(true); // Prevent any default use (placing blocks, etc.)
+        e.setCancelled(true);
     }
 
     private void togglePause() {
@@ -343,7 +469,6 @@ public class ReplaySession implements Listener, PacketListener {
         if (tick <= 0) tick = 1;
         if (tick >= timeline.size()) tick = timeline.size() - 1;
 
-        // Immediately update all entities to the new tick
         Map<String, Object> event = timeline.get(tick);
         for (RecordedEntity entity : recordedEntities.values()) {
             handleEvent(entity, event);
@@ -354,25 +479,55 @@ public class ReplaySession implements Listener, PacketListener {
     public void onInventoryClick(InventoryClickEvent e) {
         Player player = (Player) e.getWhoClicked();
         if (!player.equals(viewer))
-            return; // Only for the replay viewer
+            return;
 
         if(!isActive())
             return;
-        // Check if the clicked slot is one of the controls
-        if (controlSlots.contains(e.getSlot())) {
-            e.setCancelled(true);
-        }
 
-        if (e.getView().getTitle().contains("'s Inventory")) {
-            e.setCancelled(true);
-        }
+        e.setCancelled(true);
+
     }
+
+    @EventHandler
+    public void onPlayerMenuClick(InventoryClickEvent e) {
+        if (!e.getView().getTitle().equals("§8Recorded Players"))
+            return;
+
+        e.setCancelled(true);
+
+        if (!(e.getWhoClicked() instanceof Player player))
+            return;
+
+        ItemStack item = e.getCurrentItem();
+        if (item == null || !(item.getItemMeta() instanceof SkullMeta meta))
+            return;
+
+        OfflinePlayer target = meta.getOwningPlayer();
+        if (target == null)
+            return;
+
+
+        RecordedEntity recorded = recordedEntities.get(target.getUniqueId());
+        if (recorded == null)
+            return;
+
+        player.teleport(recorded.getCurrentLocation());
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        if (!event.getPlayer().equals(viewer))
+            return;
+
+        stop();
+    }
+
 
     @EventHandler
     public void onInventoryDrag(InventoryDragEvent e) {
         if (e.getWhoClicked() != viewer)
             return;
-        if (isActive())
+        if (!isActive())
             return;
         if (!e.getView().getTitle().contains("'s Inventory"))
             return;
@@ -384,7 +539,7 @@ public class ReplaySession implements Listener, PacketListener {
     public void onPlayerDropItem(PlayerDropItemEvent e) {
         Player player = e.getPlayer();
 
-        if (isActive())
+        if (!isActive())
             return;
 
         if (!player.equals(viewer))
@@ -404,7 +559,6 @@ public class ReplaySession implements Listener, PacketListener {
     public void onEntityInteract(PlayerInteractAtEntityEvent e) {
         Player viewerPlayer = e.getPlayer();
 
-        // Only care about the viewer
         if (!viewer.equals(viewerPlayer))
             return;
 
@@ -415,10 +569,9 @@ public class ReplaySession implements Listener, PacketListener {
         if (!(recordedEntity instanceof RecordedPlayer rp))
             return;
 
-        // Open the recorded player's inventory snapshot
         rp.openInventoryForViewer(viewerPlayer);
 
-        e.setCancelled(true); // Prevent interacting with the fake player
+        e.setCancelled(true);
     }
 
     @Override
@@ -426,27 +579,23 @@ public class ReplaySession implements Listener, PacketListener {
         if (!event.getPacketType().equals(PacketType.Play.Client.INTERACT_ENTITY))
             return;
 
-        // Only care about the viewer’s interactions
         if (!event.getPlayer().equals(viewer))
             return;
 
         WrapperPlayClientInteractEntity wrapper = new WrapperPlayClientInteractEntity(event);
 
-        /*
-        Prevent picking up fake items dropped in a replay
-         */
+
         if (trackedEntityIds.contains(wrapper.getEntityId()))
             event.setCancelled(true);
 
         int entityId = wrapper.getEntityId();
         RecordedEntity recordedEntity = recordedEntities.values()
                 .stream()
-                .filter(e -> e.getFakeEntityId() == entityId) // you'll need getFakeEntityId() accessor
+                .filter(e -> e.getFakeEntityId() == entityId)
                 .findFirst()
                 .orElse(null);
 
         if (recordedEntity instanceof RecordedPlayer rp) {
-            // Open the fake inventory snapshot
             rp.openInventoryForViewer(viewer);
             event.setCancelled(true);
         }
@@ -471,7 +620,6 @@ public class ReplaySession implements Listener, PacketListener {
         int amount = ((Number) map.get("amount")).intValue();
         ItemStack item = new ItemStack(type, amount);
 
-        // Optional: simple meta reconstruction
         if (map.containsKey("displayName") || map.containsKey("lore")) {
             ItemMeta meta = item.getItemMeta();
             if (meta != null) {
@@ -524,5 +672,54 @@ public class ReplaySession implements Listener, PacketListener {
         PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, meta);
     }
 
+    private void openPlayerMenu() {
+        Inventory inv = Bukkit.createInventory(
+                null,
+                27,
+                "§8Recorded Players"
+        );
+
+        for (RecordedEntity entity : recordedEntities.values()) {
+            if (!(entity instanceof RecordedPlayer rp))
+                continue;
+
+            ItemStack head = new ItemStack(Material.PLAYER_HEAD);
+            SkullMeta meta = (SkullMeta) head.getItemMeta();
+            meta.setOwningPlayer(Bukkit.getOfflinePlayer(rp.getUuid()));
+            meta.setDisplayName("§e" + rp.getName());
+            head.setItemMeta(meta);
+
+            inv.addItem(head);
+        }
+
+        viewer.openInventory(inv);
+    }
+
+    private String formatTime(int ticks) {
+        int seconds = ticks / 20;
+        int minutes = seconds / 60;
+        seconds %= 60;
+        return String.format("%02d:%02d", minutes, seconds);
+    }
+
+    private void sendActionBar() {
+        int totalTicks = timeline.size();
+
+        String current = formatTime(tick);
+        String total = formatTime(totalTicks);
+        int percent = totalTicks > 0 ? (tick * 100 / totalTicks) : 0;
+
+        Component bar;
+
+        if (paused) {
+            bar = Component.text("⏸ Replay paused: ", NamedTextColor.YELLOW)
+                    .append(Component.text(current + " / " + total, NamedTextColor.GRAY));
+        } else {
+            bar = Component.text("▶ Replay: ", NamedTextColor.GREEN)
+                    .append(Component.text(current + " / " + total, NamedTextColor.GRAY))
+                    .append(Component.text(" (" + percent + "%)", NamedTextColor.DARK_GRAY));
+        }
+        viewer.sendActionBar(bar);
+    }
 }
 

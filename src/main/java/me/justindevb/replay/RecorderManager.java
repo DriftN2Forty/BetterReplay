@@ -7,10 +7,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.io.File;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
 
 public class RecorderManager {
     private final Replay replay;
@@ -39,12 +36,12 @@ public class RecorderManager {
     }
 
 
-    public boolean stopSession(String name) {
+    public boolean stopSession(String name, boolean save) {
         RecordingSession session = activeSessions.remove(name);
         if (session == null)
             return false;
 
-        session.stop();
+        session.stop(save);
 
         Bukkit.getPluginManager().callEvent(new RecordingStopEvent(session));
 
@@ -76,18 +73,38 @@ public class RecorderManager {
         return activeSessions;
     }
 
+    @Deprecated
     public void replaySession(String name, Player viewer) {
-        File file = new File(replay.getDataFolder(), name + ".json");
+        replay.getReplayStorage().loadReplay(name)
+                .thenAccept(rawTimeline -> {
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> timeline = (List<Map<String, Object>>) rawTimeline;
+
+                    Bukkit.getScheduler().runTask(replay, () -> {
+                        new ReplaySession(timeline, viewer, replay).start();
+                    });
+                })
+                .exceptionally(ex -> {
+                    ex.printStackTrace();
+                    viewer.sendMessage("§cFailed to load replay: " + name);
+                    return null;
+                });
+    }
+
+
+ /*   public void replaySession(String name, Player viewer) {
+        File file = new File(replay.getDataFolder(), "replays/" + name + ".json");
         if (!file.exists()) {
             viewer.sendMessage("Replay not found: " + name);
             return;
         }
         new ReplaySession(file, viewer, replay).start();
     }
+  */
 
     public void shutdown() {
         for (RecordingSession s : activeSessions.values())
-            s.stop();
+            s.stop(false);
 
         activeSessions.clear();
         if (tickTask != null) {

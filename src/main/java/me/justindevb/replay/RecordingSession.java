@@ -7,6 +7,7 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBl
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import io.github.retrooper.packetevents.util.SpigotConversionUtil;
+import me.justindevb.replay.util.ReplayObject;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
@@ -26,12 +27,11 @@ import org.bukkit.event.player.*;
 import org.bukkit.inventory.ItemStack;
 
 import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.util.*;
 
 public class RecordingSession implements Listener, PacketListener {
 
+    private final Replay replay;
     private final String name;
     private final File file;
     private final Gson gson;
@@ -50,6 +50,7 @@ public class RecordingSession implements Listener, PacketListener {
         this.trackedPlayers = new HashSet<>();
         for (Player p : players) this.trackedPlayers.add(p.getUniqueId());
         this.durationTicks = durationSeconds > 0 ? durationSeconds * 20 : -1;
+        this.replay = Replay.getInstance();
     }
 
     public void start() {
@@ -59,7 +60,7 @@ public class RecordingSession implements Listener, PacketListener {
                 + " player(s), duration=" + (durationTicks == -1 ? "∞" : durationTicks / 20 + "s"));
 
         // Register Bukkit listeners for this session
-        Bukkit.getPluginManager().registerEvents(this, Replay.getInstance());
+        Bukkit.getPluginManager().registerEvents(this, replay);
 
         captureInitialInventory();
     }
@@ -70,7 +71,7 @@ public class RecordingSession implements Listener, PacketListener {
 
         // Stop automatically after duration
         if (durationTicks != -1 && tick >= durationTicks) {
-            stop();
+            stop(true);
             return;
         }
 
@@ -142,7 +143,6 @@ public class RecordingSession implements Listener, PacketListener {
         event.put("loc", serializeLocation(p.getLocation()));
         timeline.add(event);
 
-        e.setCancelled(true);
     }
 
 
@@ -284,16 +284,43 @@ public class RecordingSession implements Listener, PacketListener {
         timeline.add(event);
     }
 
-    public void stop() {
+    public void stop(boolean save) {
         if (stopped) return;
         stopped = true;
 
-        try (FileWriter writer = new FileWriter(file)) {
-            gson.toJson(timeline, writer);
-            Bukkit.getLogger().info("Recording saved to " + file.getAbsolutePath());
-        } catch (IOException e) {
-            e.printStackTrace();
+        trackedPlayers.clear();
+
+        if (!save) return;
+
+        ReplayObject replayObject = new ReplayObject(
+                name,
+                timeline,
+                replay.getReplayStorage()
+        );
+
+        replayObject.save()
+                .thenCompose(v ->
+                        replay.getReplayStorage().listReplays()
+                )
+                .thenAccept(replays -> {
+                    replay.getReplayCache().setReplays(replays);
+                    replay.getLogger().info("Recording " + name + " saved!");
+                })
+                .exceptionally(ex -> {
+                    ex.printStackTrace();
+                    return null;
+                });
+
+
+    /*    if (save) {
+            try (FileWriter writer = new FileWriter(file)) {
+                gson.toJson(timeline, writer);
+                Bukkit.getLogger().info("Recording saved to " + file.getAbsolutePath());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
+     */
     }
 
     public boolean isStopped() {
