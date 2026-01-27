@@ -273,6 +273,7 @@ public class ReplaySession implements Listener, PacketListener {
 
         Bukkit.getPluginManager().callEvent(new ReplayStopEvent(viewer, this));
         recordedEntities.values().forEach(RecordedEntity::destroy);
+        clearFakeItems();
         recordedEntities.clear();
 
         if (replayTaskId != -1) {
@@ -374,7 +375,6 @@ public class ReplaySession implements Listener, PacketListener {
         }
     }
 
-    // Helpers
     private Double asDouble(Object obj) {
         return obj instanceof Number n ? n.doubleValue() : null;
     }
@@ -424,7 +424,6 @@ public class ReplaySession implements Listener, PacketListener {
         if (timeline.isEmpty()) return null;
         Map<String, Object> firstEvent = timeline.get(0);
 
-        // Only return the inventory part if it matches the UUID
         if (!uuid.toString().equals(firstEvent.get("uuid")))
             return null;
 
@@ -458,7 +457,7 @@ public class ReplaySession implements Listener, PacketListener {
             case "§bPlayers" -> openPlayerMenu();
         }
 
-        e.setCancelled(true); // Prevent any default use (placing blocks, etc.)
+        e.setCancelled(true);
     }
 
     private void togglePause() {
@@ -470,7 +469,6 @@ public class ReplaySession implements Listener, PacketListener {
         if (tick <= 0) tick = 1;
         if (tick >= timeline.size()) tick = timeline.size() - 1;
 
-        // Immediately update all entities to the new tick
         Map<String, Object> event = timeline.get(tick);
         for (RecordedEntity entity : recordedEntities.values()) {
             handleEvent(entity, event);
@@ -481,7 +479,7 @@ public class ReplaySession implements Listener, PacketListener {
     public void onInventoryClick(InventoryClickEvent e) {
         Player player = (Player) e.getWhoClicked();
         if (!player.equals(viewer))
-            return; // Only for the replay viewer
+            return;
 
         if(!isActive())
             return;
@@ -561,7 +559,6 @@ public class ReplaySession implements Listener, PacketListener {
     public void onEntityInteract(PlayerInteractAtEntityEvent e) {
         Player viewerPlayer = e.getPlayer();
 
-        // Only care about the viewer
         if (!viewer.equals(viewerPlayer))
             return;
 
@@ -572,10 +569,9 @@ public class ReplaySession implements Listener, PacketListener {
         if (!(recordedEntity instanceof RecordedPlayer rp))
             return;
 
-        // Open the recorded player's inventory snapshot
         rp.openInventoryForViewer(viewerPlayer);
 
-        e.setCancelled(true); // Prevent interacting with the fake player
+        e.setCancelled(true);
     }
 
     @Override
@@ -583,27 +579,23 @@ public class ReplaySession implements Listener, PacketListener {
         if (!event.getPacketType().equals(PacketType.Play.Client.INTERACT_ENTITY))
             return;
 
-        // Only care about the viewer’s interactions
         if (!event.getPlayer().equals(viewer))
             return;
 
         WrapperPlayClientInteractEntity wrapper = new WrapperPlayClientInteractEntity(event);
 
-        /*
-        Prevent picking up fake items dropped in a replay
-         */
+
         if (trackedEntityIds.contains(wrapper.getEntityId()))
             event.setCancelled(true);
 
         int entityId = wrapper.getEntityId();
         RecordedEntity recordedEntity = recordedEntities.values()
                 .stream()
-                .filter(e -> e.getFakeEntityId() == entityId) // you'll need getFakeEntityId() accessor
+                .filter(e -> e.getFakeEntityId() == entityId)
                 .findFirst()
                 .orElse(null);
 
         if (recordedEntity instanceof RecordedPlayer rp) {
-            // Open the fake inventory snapshot
             rp.openInventoryForViewer(viewer);
             event.setCancelled(true);
         }
@@ -628,7 +620,6 @@ public class ReplaySession implements Listener, PacketListener {
         int amount = ((Number) map.get("amount")).intValue();
         ItemStack item = new ItemStack(type, amount);
 
-        // Optional: simple meta reconstruction
         if (map.containsKey("displayName") || map.containsKey("lore")) {
             ItemMeta meta = item.getItemMeta();
             if (meta != null) {
@@ -728,11 +719,7 @@ public class ReplaySession implements Listener, PacketListener {
                     .append(Component.text(current + " / " + total, NamedTextColor.GRAY))
                     .append(Component.text(" (" + percent + "%)", NamedTextColor.DARK_GRAY));
         }
-
         viewer.sendActionBar(bar);
     }
-
-
-
 }
 
