@@ -37,7 +37,8 @@ public class PacketEventsListener implements PacketListener {
         }
 
         if (clicked instanceof RecordedPlayer rp) {
-            Bukkit.getScheduler().runTask(Replay.getInstance(), () -> {
+            //Bukkit.getScheduler().runTask(Replay.getInstance(), () -> {
+            replay.getFoliaLib().getScheduler().runNextTick(task -> {
                 rp.openInventoryForViewer(viewer);
             });
             event.setCancelled(true);

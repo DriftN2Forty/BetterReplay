@@ -102,7 +102,8 @@ public class ReplayManagerImpl implements ReplayManager {
         if (Bukkit.isPrimaryThread()) {
             task.run();
         } else {
-            Bukkit.getScheduler().runTask(replay, task);
+            //Bukkit.getScheduler().runTask(replay, task);
+            replay.getFoliaLib().getScheduler().runLater(task, 1L);
         }
     }
 

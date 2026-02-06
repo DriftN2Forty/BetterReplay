@@ -123,7 +123,8 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
                     return true;
                 }
                 Replay.getInstance().getReplayStorage().listReplays().thenAccept(replays -> {
-                    Bukkit.getScheduler().runTask(Replay.getInstance(), () -> {
+                   // Bukkit.getScheduler().runTask(Replay.getInstance(), () -> {
+                    Replay.getInstance().getFoliaLib().getScheduler().runNextTick(task -> {
                         if (replays.isEmpty()) {
                             sender.sendMessage("No saved replays");
                         } else {
@@ -162,7 +163,8 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
                                     return success;
                                 }))
                         .thenAccept(success -> {
-                            Bukkit.getScheduler().runTask(Replay.getInstance(), () -> {
+                            //Bukkit.getScheduler().runTask(Replay.getInstance(), () -> {
+                            Replay.getInstance().getFoliaLib().getScheduler().runNextTick(task -> {
                                 if (success) {
                                     p.sendMessage("§aDeleted replay: " + name);
                                 } else {
@@ -172,7 +174,8 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
                         })
                         .exceptionally(ex -> {
                             ex.printStackTrace();
-                            Bukkit.getScheduler().runTask(Replay.getInstance(), () ->
+                           // Bukkit.getScheduler().runTask(Replay.getInstance(), () ->
+                            Replay.getInstance().getFoliaLib().getScheduler().runNextTick(task ->
                                     p.sendMessage("§cFailed to delete replay: " + name));
                             return null;
                         });

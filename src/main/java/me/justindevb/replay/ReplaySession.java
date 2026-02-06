@@ -12,8 +12,10 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerDe
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity;
 import com.google.gson.Gson;
+import com.tcoded.folialib.wrapper.task.WrappedTask;
 import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import io.github.retrooper.packetevents.util.SpigotReflectionUtil;
+import me.justindevb.replay.api.events.ReplayStartEvent;
 import me.justindevb.replay.api.events.ReplayStopEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -47,7 +49,8 @@ public class ReplaySession implements Listener, PacketListener {
     private final Replay replay;
     private final Gson gson = new Gson();
 
-    private int replayTaskId = -1;
+   // private int replayTaskId = -1;
+    private WrappedTask replayTask = null;
 
     private List<Map<String, Object>> timeline;
     //private List<Integer> trackedEntityIds = new ArrayList<>();
@@ -88,135 +91,142 @@ public class ReplaySession implements Listener, PacketListener {
             Float pitch = asFloat(firstLocationEvent.get("pitch"));
 
             if (x != null && y != null && z != null) {
-                viewer.teleport(new Location(viewer.getWorld(), x, y, z, yaw, pitch));
+                //viewer.teleport(new Location(viewer.getWorld(), x, y, z, yaw, pitch));
+                replay.getFoliaLib().getScheduler().teleportAsync(viewer, new Location(viewer.getWorld(), x, y, z, yaw, pitch));
             }
         }
 
         giveReplayControls(viewer);
 
-     //   Bukkit.getPluginManager().callEvent(new ReplayStartEvent(viewer, file, this));
+        Bukkit.getPluginManager().callEvent(new ReplayStartEvent(viewer, this));
 
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                replayTaskId = getTaskId();
+     //   new BukkitRunnable() {
+      //      @Override
+        //    public void run() {
+        replay.getFoliaLib().getScheduler().runTimer(task -> {
+            //replayTaskId = getTaskId();
+            replayTask = task;
 
-                if (tick >= timeline.size()) {
-                    cancel();
-                    stop();
-                    return;
-                }
 
-                if (viewer == null || !viewer.isOnline()) {
-                    cancel();
-                    recordedEntities.values().forEach(RecordedEntity::destroy);
-                    recordedEntities.clear();
-                    return;
-                }
-
-                Map<String, Object> firstEvent = timeline.get(tick);
-                Object tickObj = firstEvent.get("tick");
-
-                if (!(tickObj instanceof Number)) {
-                    tick++;
-                    return;
-                }
-
-                int recordedTick = ((Number) tickObj).intValue();
-
-                while (tick < timeline.size()) {
-                    Map<String, Object> event = timeline.get(tick);
-
-                    Object eventTickObj = event.get("tick");
-                    if (!(eventTickObj instanceof Number)) break;
-
-                    int eventTick = ((Number) eventTickObj).intValue();
-                    if (eventTick != recordedTick) break;
-
-                    String type = (String) event.get("type");
-                    if (type == null) {
-                        tick++;
-                        continue;
-                    }
-
-                    Object uuidObj = event.get("uuid");
-                    if (!(uuidObj instanceof String uuidStr)) {
-                        tick++;
-                        continue;
-                    }
-
-                    UUID uuid;
-                    try {
-                        uuid = UUID.fromString(uuidStr);
-                    } catch (IllegalArgumentException ex) {
-                        tick++;
-                        continue;
-                    }
-
-                    if ("player_quit".equals(type)) {
-                        RecordedEntity entity = recordedEntities.remove(uuid);
-                        if (entity != null) {
-                            entity.destroy();
-                            trackedEntityIds.remove(entity.getFakeEntityId());
-                        }
-                        tick++;
-                        continue;
-                    }
-
-                    RecordedEntity recorded = recordedEntities.get(uuid);
-
-                    if (recorded != null && recorded.isDestroyed()) {
-                        recordedEntities.remove(uuid);
-                        tick++;
-                        continue;
-                    }
-
-                    if (recorded == null) {
-                        Double x = asDouble(event.get("x"));
-                        Double y = asDouble(event.get("y"));
-                        Double z = asDouble(event.get("z"));
-
-                        if (x == null || y == null || z == null) {
-                            tick++;
-                            continue;
-                        }
-
-                        Location initialLoc = new Location(
-                                viewer.getWorld(),
-                                x,
-                                y,
-                                z,
-                                asFloat(event.get("yaw")),
-                                asFloat(event.get("pitch"))
-                        );
-
-                        recorded = RecordedEntityFactory.create(event, viewer);
-                        if (recorded == null) {
-                            tick++;
-                            continue;
-                        }
-
-                        recorded.spawn(initialLoc);
-                        recordedEntities.put(uuid, recorded);
-
-                        if (recorded instanceof RecordedPlayer rp) {
-                            Map<String, Object> inv = getInventorySnapshotForPlayer(uuid);
-                            if (inv != null) rp.updateInventory(inv);
-                        }
-                    }
-
-                    handleEvent(recorded, event);
-
-                    if ("entity_death".equals(type)) {
-                        recorded.destroy();
-                        recordedEntities.remove(uuid);
-                    }
-
-                    tick++;
-                }
-                sendActionBar();
+            if (tick >= timeline.size()) {
+                //cancel();
+                task.cancel();
+                stop();
+                return;
             }
-        }.runTaskTimer(replay, 1L, 1L);
+
+            if (viewer == null || !viewer.isOnline()) {
+                //cancel();
+                task.cancel();
+                recordedEntities.values().forEach(RecordedEntity::destroy);
+                recordedEntities.clear();
+                return;
+            }
+
+            Map<String, Object> firstEvent = timeline.get(tick);
+            Object tickObj = firstEvent.get("tick");
+
+            if (!(tickObj instanceof Number)) {
+                tick++;
+                return;
+            }
+
+            int recordedTick = ((Number) tickObj).intValue();
+
+            while (tick < timeline.size()) {
+                Map<String, Object> event = timeline.get(tick);
+
+                Object eventTickObj = event.get("tick");
+                if (!(eventTickObj instanceof Number)) break;
+
+                int eventTick = ((Number) eventTickObj).intValue();
+                if (eventTick != recordedTick) break;
+
+                String type = (String) event.get("type");
+                if (type == null) {
+                    tick++;
+                    continue;
+                }
+
+                Object uuidObj = event.get("uuid");
+                if (!(uuidObj instanceof String uuidStr)) {
+                    tick++;
+                    continue;
+                }
+
+                UUID uuid;
+                try {
+                    uuid = UUID.fromString(uuidStr);
+                } catch (IllegalArgumentException ex) {
+                    tick++;
+                    continue;
+                }
+
+                if ("player_quit".equals(type)) {
+                    RecordedEntity entity = recordedEntities.remove(uuid);
+                    if (entity != null) {
+                        entity.destroy();
+                        trackedEntityIds.remove(entity.getFakeEntityId());
+                    }
+                    tick++;
+                    continue;
+                }
+
+                RecordedEntity recorded = recordedEntities.get(uuid);
+
+                if (recorded != null && recorded.isDestroyed()) {
+                    recordedEntities.remove(uuid);
+                    tick++;
+                    continue;
+                }
+
+                if (recorded == null) {
+                    Double x = asDouble(event.get("x"));
+                    Double y = asDouble(event.get("y"));
+                    Double z = asDouble(event.get("z"));
+
+                    if (x == null || y == null || z == null) {
+                        tick++;
+                        continue;
+                    }
+
+                    Location initialLoc = new Location(
+                            viewer.getWorld(),
+                            x,
+                            y,
+                            z,
+                            asFloat(event.get("yaw")),
+                            asFloat(event.get("pitch"))
+                    );
+
+                    recorded = RecordedEntityFactory.create(event, viewer);
+                    if (recorded == null) {
+                        tick++;
+                        continue;
+                    }
+
+                    recorded.spawn(initialLoc);
+                    recordedEntities.put(uuid, recorded);
+
+                    if (recorded instanceof RecordedPlayer rp) {
+                        Map<String, Object> inv = getInventorySnapshotForPlayer(uuid);
+                        if (inv != null) rp.updateInventory(inv);
+                    }
+                }
+
+                handleEvent(recorded, event);
+
+                if ("entity_death".equals(type)) {
+                    recorded.destroy();
+                    recordedEntities.remove(uuid);
+                }
+
+                tick++;
+            }
+            sendActionBar();
+            // }
+            // }.runTaskTimer(replay, 1L, 1L);
+        },1L, 1L);
     }
 
 
@@ -229,9 +239,12 @@ public class ReplaySession implements Listener, PacketListener {
 
         clearFakeItems();
         restoreInventory();
-        if (replayTaskId != -1) {
-            Bukkit.getScheduler().cancelTask(replayTaskId);
-            replayTaskId = -1;
+       // if (replayTaskId != -1) {
+        if (replayTask != null) {
+            //Bukkit.getScheduler().cancelTask(replayTaskId);
+            replay.getFoliaLib().getScheduler().cancelTask(replayTask);
+           // replayTaskId = -1;
+            replayTask = null;
         }
 
         viewer.sendMessage("Replay finished");
@@ -508,7 +521,8 @@ public class ReplaySession implements Listener, PacketListener {
         if (recorded == null)
             return;
 
-        player.teleport(recorded.getCurrentLocation());
+        //player.teleport(recorded.getCurrentLocation());
+        replay.getFoliaLib().getScheduler().teleportAsync(player, recorded.getCurrentLocation());
     }
 
     @EventHandler

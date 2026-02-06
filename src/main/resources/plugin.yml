@@ -4,6 +4,7 @@ version: ${project.version}
 author: ${author}
 depend: [packetevents]
 api-version: 1.13
+folia-supported: true
 commands:
   replay:
     description: Replay base command

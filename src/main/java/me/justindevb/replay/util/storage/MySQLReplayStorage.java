@@ -27,7 +27,8 @@ public class MySQLReplayStorage implements ReplayStorage {
     }
 
     private void init() {
-        Bukkit.getScheduler().runTaskAsynchronously(replay, () -> {
+        //Bukkit.getScheduler().runTaskAsynchronously(replay, () -> {
+        replay.getFoliaLib().getScheduler().runAsync(task -> {
             try (Connection conn = dataSource.getConnection();
                  Statement stmt = conn.createStatement()) {
 
