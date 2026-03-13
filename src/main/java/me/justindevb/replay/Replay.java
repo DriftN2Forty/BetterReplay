@@ -22,7 +22,6 @@ public class Replay extends JavaPlugin {
     private static Replay instance;
     private RecorderManager recorderManager;
     private ReplayStorage storage = null;
-  //  private FileReplayStorage fileReplayStorage;
     private MySQLConnectionManager connectionManager;
     private ReplayCache replayCache;
     private ReplayManagerImpl manager;
@@ -44,7 +43,6 @@ public class Replay extends JavaPlugin {
         foliaLib = new FoliaLib(this);
 
         recorderManager = new RecorderManager(this);
-      //  fileReplayStorage = new FileReplayStorage(this);
         ReplayCommand replayCommand = new ReplayCommand(recorderManager);
         initConfig();
 
@@ -89,11 +87,6 @@ public class Replay extends JavaPlugin {
     public RecorderManager getRecorderManager() {
         return recorderManager;
     }
-
-  /*  public FileReplayStorage getReplayStorage() {
-        return fileReplayStorage;
-    }
-*/
 
     public ReplayStorage getReplayStorage() {
         return storage;

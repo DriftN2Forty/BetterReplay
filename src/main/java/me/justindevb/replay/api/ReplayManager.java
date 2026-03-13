@@ -40,7 +40,6 @@ public interface ReplayManager {
      * @param viewer
      * @return
      */
-    //Optional<?> startReplay(File replayFile, Player viewer);
     CompletableFuture<Optional<ReplaySession>> startReplay(String replayName, Player viewer);
 
     /**
@@ -60,7 +59,6 @@ public interface ReplayManager {
      * List of all saved replays
      * @return
      */
-  //  List<String> listSavedReplays();
     CompletableFuture<List<String>> listSavedReplays();
 
     /**
@@ -68,7 +66,6 @@ public interface ReplayManager {
      * @param name
      * @return
      */
-   // Optional<File> getSavedReplayFile(String name);
     CompletableFuture<Optional<File>> getSavedReplayFile(String name);
 
 }

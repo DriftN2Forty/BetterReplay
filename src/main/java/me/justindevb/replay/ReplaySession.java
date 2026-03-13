@@ -39,21 +39,17 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.*;
 
 public class ReplaySession implements Listener, PacketListener {
-    //private final File file;
     private final Player viewer;
     private final Replay replay;
     private final Gson gson = new Gson();
 
-   // private int replayTaskId = -1;
     private WrappedTask replayTask = null;
 
     private List<Map<String, Object>> timeline;
-    //private List<Integer> trackedEntityIds = new ArrayList<>();
     private final Set<Integer> trackedEntityIds = new HashSet<>();
     private final Map<UUID, RecordedEntity> recordedEntities = new HashMap<>();
     private int tick = 0;
@@ -91,7 +87,6 @@ public class ReplaySession implements Listener, PacketListener {
             Float pitch = asFloat(firstLocationEvent.get("pitch"));
 
             if (x != null && y != null && z != null) {
-                //viewer.teleport(new Location(viewer.getWorld(), x, y, z, yaw, pitch));
                 replay.getFoliaLib().getScheduler().teleportAsync(viewer, new Location(viewer.getWorld(), x, y, z, yaw, pitch));
             }
         }
@@ -100,23 +95,21 @@ public class ReplaySession implements Listener, PacketListener {
 
         Bukkit.getPluginManager().callEvent(new ReplayStartEvent(viewer, this));
 
-     //   new BukkitRunnable() {
-      //      @Override
-        //    public void run() {
         replay.getFoliaLib().getScheduler().runTimer(task -> {
-            //replayTaskId = getTaskId();
+            if (paused) {
+                sendActionBar();
+                return;
+            }
             replayTask = task;
 
 
             if (tick >= timeline.size()) {
-                //cancel();
                 task.cancel();
                 stop();
                 return;
             }
 
             if (viewer == null || !viewer.isOnline()) {
-                //cancel();
                 task.cancel();
                 recordedEntities.values().forEach(RecordedEntity::destroy);
                 recordedEntities.clear();
@@ -224,8 +217,7 @@ public class ReplaySession implements Listener, PacketListener {
                 tick++;
             }
             sendActionBar();
-            // }
-            // }.runTaskTimer(replay, 1L, 1L);
+
         },1L, 1L);
     }
 
@@ -239,11 +231,8 @@ public class ReplaySession implements Listener, PacketListener {
 
         clearFakeItems();
         restoreInventory();
-       // if (replayTaskId != -1) {
         if (replayTask != null) {
-            //Bukkit.getScheduler().cancelTask(replayTaskId);
             replay.getFoliaLib().getScheduler().cancelTask(replayTask);
-           // replayTaskId = -1;
             replayTask = null;
         }
 
@@ -277,7 +266,7 @@ public class ReplaySession implements Listener, PacketListener {
 
     private void handleEvent(RecordedEntity entity, Map<String, Object> event) {
         String type = (String) event.get("type");
-        if (type == null) return; // skip malformed event
+        if (type == null) return;
 
         switch (type) {
             case "player_move", "entity_move" -> {
@@ -297,7 +286,6 @@ public class ReplaySession implements Listener, PacketListener {
                             Pose pose = Pose.valueOf(poseName);
                             rp.setPose(pose);
                         } catch (IllegalArgumentException ignored) {
-                            // invalid pose string, ignore
                         }
                     }
                 }
@@ -521,7 +509,6 @@ public class ReplaySession implements Listener, PacketListener {
         if (recorded == null)
             return;
 
-        //player.teleport(recorded.getCurrentLocation());
         replay.getFoliaLib().getScheduler().teleportAsync(player, recorded.getCurrentLocation());
     }
 

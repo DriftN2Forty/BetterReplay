@@ -20,7 +20,6 @@ public class SpawnFakeMob {
     private final Player viewer;
 
     public SpawnFakeMob(EntityType type, Location spawnLocation, Player viewer, int entityId) {
-      //  this.entityId = SpigotReflectionUtil.generateEntityId();
         this.entityId = entityId;
         this.uuid = UUID.randomUUID();
         this.type = type;
@@ -31,11 +30,9 @@ public class SpawnFakeMob {
     }
 
     private void spawn() {
-        // Spawn entity packet
         WrapperPlayServerSpawnEntity spawnEntity = new WrapperPlayServerSpawnEntity(
                 entityId,
                 UUID.randomUUID(),
-               // EntityTypes.getByName(type.toString()),
                 type,
                 SpigotConversionUtil.fromBukkitLocation(spawnLocation),
                 spawnLocation.getYaw(),

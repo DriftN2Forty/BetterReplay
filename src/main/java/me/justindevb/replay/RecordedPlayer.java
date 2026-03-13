@@ -57,7 +57,6 @@ public class RecordedPlayer extends RecordedEntity {
         SpawnFakePlayer fakePlayer = new SpawnFakePlayer(uuid, name, location, viewer, super.fakeEntityId);
         this.spawned = true;
 
-        //Bukkit.getScheduler().runTaskLater(Replay.getInstance(), this::sendMetadata, 1L);
         Replay.getInstance().getFoliaLib().getScheduler().runLater(this::sendMetadata, 1L);
 
 
@@ -336,7 +335,6 @@ public class RecordedPlayer extends RecordedEntity {
 
         inv.setItem(40, deserializeItem(currentInventory.get("offHand")));
 
-        //Bukkit.getScheduler().runTask(Replay.getInstance(), () -> viewer.openInventory(inv));
         Replay.getInstance().getFoliaLib().getScheduler().runNextTick(task -> {
            viewer.openInventory(inv);
         });

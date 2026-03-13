@@ -1,7 +1,6 @@
 package me.justindevb.replay.util;
 
 import com.github.retrooper.packetevents.PacketEvents;
-import com.github.retrooper.packetevents.manager.server.ServerVersion;
 import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
 import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
 import com.github.retrooper.packetevents.protocol.entity.type.EntityTypes;
@@ -13,7 +12,6 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEn
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerInfoUpdate;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity;
 import io.github.retrooper.packetevents.util.SpigotConversionUtil;
-import io.github.retrooper.packetevents.util.SpigotReflectionUtil;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 
@@ -32,7 +30,6 @@ public class SpawnFakePlayer {
     private final UUID fakeUuid;
 
     public SpawnFakePlayer(UUID profileUuid, String name, Location spawnLocation, Player viewer, int entityId) {
-      //  this.entityId = SpigotReflectionUtil.generateEntityId();
         this.profileUuid = profileUuid;
         this.name = name;
         this.spawnLocation = spawnLocation;
@@ -63,8 +60,6 @@ public class SpawnFakePlayer {
 
         PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, spawnEntityPacket);
 
-       // List<EntityData<?>> skinMeta = new ArrayList<>();
-        //skinMeta.add(new EntityData<>(17, EntityDataTypes.BYTE, (byte) (0x01 | 0x02 | 0x04 | 0x08 | 0x10 | 0x20 | 0x40)));
         List<EntityData<?>> skinMeta = new ArrayList<>();
         int SKIN_LAYER_INDEX = PacketEvents.getAPI().getPlayerManager().getClientVersion(viewer).isNewerThanOrEquals(ClientVersion.V_1_21_9) ? 16 : 17;
 

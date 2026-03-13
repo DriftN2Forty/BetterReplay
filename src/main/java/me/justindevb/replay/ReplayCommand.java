@@ -1,7 +1,9 @@
 package me.justindevb.replay;
 
 import me.justindevb.replay.util.ReplayObject;
-import me.justindevb.replay.util.storage.FileReplayStorage;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -12,14 +14,13 @@ import org.bukkit.entity.Player;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.logging.Level;
 
 public class ReplayCommand implements CommandExecutor, TabCompleter {
     private final RecorderManager manager;
-   // private final FileReplayStorage storage;
 
     public ReplayCommand(RecorderManager manager) {
         this.manager = manager;
-     //   this.storage = Replay.getInstance().getReplayStorage();
     }
 
     //TODO: Refactor this mess to strictly utilize the API instead of plugin internals
@@ -108,8 +109,6 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
                     p.sendMessage("§c/replay play <name>");
                     return true;
                 }
-                //manager.replaySession(args[1], p);
-
                 Replay.getInstance()
                         .getReplayManagerImpl()
                         .startReplay(args[1], p);
@@ -122,27 +121,75 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
                     p.sendMessage("You do not have permission");
                     return true;
                 }
-                Replay.getInstance().getReplayStorage().listReplays().thenAccept(replays -> {
-                   // Bukkit.getScheduler().runTask(Replay.getInstance(), () -> {
-                    Replay.getInstance().getFoliaLib().getScheduler().runNextTick(task -> {
-                        if (replays.isEmpty()) {
-                            sender.sendMessage("No saved replays");
-                        } else {
-                            sender.sendMessage("Saved replays:");
-                            replays.forEach(name -> sender.sendMessage(" - " + name));
-                        }
-                    });
-                });
 
-
-              /*  List<String> replays = storage.listReplays();
-                if (replays.isEmpty())
-                    sender.sendMessage("No saved replays");
-                else {
-                    sender.sendMessage("Saved replays:");
-                    replays.forEach(name -> sender.sendMessage(" - " + name));
+                int parsedPage = 1;
+                if (args.length >= 2) {
+                    try {
+                        parsedPage = Math.max(1, Integer.parseInt(args[1]));
+                    } catch (NumberFormatException ignored) {
+                        p.sendMessage("§c/replay list [page]");
+                        return true;
+                    }
                 }
-               */
+
+                final int page = parsedPage;
+
+                Replay.getInstance().getReplayStorage().listReplays()
+                        .thenAccept(replays -> Bukkit.getScheduler().runTask(Replay.getInstance(), () -> {
+                            if (replays.isEmpty()) {
+                                p.sendMessage("§cNo replays found.");
+                                return;
+                            }
+
+                            int perPage = Replay.getInstance().getConfig().getInt("list-page-size", 10);
+                            int totalPages = (int) Math.ceil((double) replays.size() / perPage);
+
+                            if (page > totalPages) {
+                                p.sendMessage("§cPage out of range. Max page: " + totalPages);
+                                return;
+                            }
+
+                            int from = (page - 1) * perPage;
+                            int to = Math.min(from + perPage, replays.size());
+
+                            p.sendMessage("§6Replays §7(Page " + page + "/" + totalPages + ")");
+                            for (int i = from; i < to; i++) {
+                                p.sendMessage("§e- §f" + replays.get(i));
+                            }
+
+                            Component navigation = Component.empty();
+
+                            if (page > 1) {
+                                navigation = navigation.append(
+                                        Component.text("§e[Previous]")
+                                                .clickEvent(ClickEvent.runCommand("/replay list " + (page - 1)))
+                                                .hoverEvent(HoverEvent.showText(Component.text("Go to page " + (page - 1))))
+                                );
+                            } else {
+                                navigation = navigation.append(Component.text("§7[Previous]"));
+                            }
+
+                            navigation = navigation.append(Component.text(" §8| "));
+
+                            if (page < totalPages) {
+                                navigation = navigation.append(
+                                        Component.text("§e[Next]")
+                                                .clickEvent(ClickEvent.runCommand("/replay list " + (page + 1)))
+                                                .hoverEvent(HoverEvent.showText(Component.text("Go to page " + (page + 1))))
+                                );
+                            } else {
+                                navigation = navigation.append(Component.text("§7[Next]"));
+                            }
+
+                            p.sendMessage(navigation);
+                        }))
+                        .exceptionally(ex -> {
+                            Replay.getInstance().getLogger().log(Level.INFO, "Failed to print list");
+                            ex.printStackTrace();
+                            return null;
+                        });
+
+                return true;
             }
 
             case "delete" -> {
@@ -163,7 +210,6 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
                                     return success;
                                 }))
                         .thenAccept(success -> {
-                            //Bukkit.getScheduler().runTask(Replay.getInstance(), () -> {
                             Replay.getInstance().getFoliaLib().getScheduler().runNextTick(task -> {
                                 if (success) {
                                     p.sendMessage("§aDeleted replay: " + name);
@@ -174,26 +220,13 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
                         })
                         .exceptionally(ex -> {
                             ex.printStackTrace();
-                           // Bukkit.getScheduler().runTask(Replay.getInstance(), () ->
                             Replay.getInstance().getFoliaLib().getScheduler().runNextTick(task ->
                                     p.sendMessage("§cFailed to delete replay: " + name));
                             return null;
                         });
 
-                /*  if (storage.deleteReplay(name))
-                    sender.sendMessage("Deleted replay: " + name);
-                else
-                    sender.sendMessage("Replay not found: " + name);
-               */
-
             }
             default -> sender.sendMessage("Unknown command");
-            /*  case "test" -> {
-                new SpawnFakePlayer(p.getUniqueId(), p.getName(), p.getLocation(), p);
-
-                return true;
-            }
-*/
         }
         return true;
     }

@@ -116,8 +116,6 @@ public class RecordingSession implements Listener, PacketListener {
             timeline.add(moveEvent);
         }
 
-        //TODO: For when I work on this next. Replays are back to showing a player moving, and it's logging sneak events, but not showing them in the replay. That is what I need to work on next. Don't focus on entityIds
-
         tick++;
     }
 
@@ -167,9 +165,6 @@ public class RecordingSession implements Listener, PacketListener {
 
     }
 
-
-
-
     @EventHandler(priority = EventPriority.MONITOR)
     public void onBlockPlace(BlockPlaceEvent e) {
         if (!trackedPlayers.contains(e.getPlayer().getUniqueId())) return;
@@ -206,7 +201,6 @@ public class RecordingSession implements Listener, PacketListener {
         if (!(entity instanceof Player) && !trackedEntities.containsKey(entity.getUniqueId())) {
             trackedEntities.put(entity.getUniqueId(), entity.getType());
 
-            // Add initial spawn for the mob
             Map<String, Object> spawnEvent = new HashMap<>();
             spawnEvent.put("tick", tick);
             spawnEvent.put("type", "entity_spawn");
@@ -255,7 +249,6 @@ public class RecordingSession implements Listener, PacketListener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntityDamaged(EntityDamageEvent e) {
-        // Only record entities we’re tracking
         if (!isTrackedPlayer(e.getEntity().getUniqueId())) return;
         Map<String, Object> event = new HashMap<>();
         event.put("tick", tick);
@@ -291,7 +284,6 @@ public class RecordingSession implements Listener, PacketListener {
     public void onEntityDeath(EntityDeathEvent e) {
         Entity entity = e.getEntity();
 
-        // Only record entities we are tracking
         UUID uuid = entity.getUniqueId();
         if (!trackedEntities.containsKey(uuid)) return;
 
@@ -399,17 +391,6 @@ public class RecordingSession implements Listener, PacketListener {
                     ex.printStackTrace();
                     return null;
                 });
-
-
-    /*    if (save) {
-            try (FileWriter writer = new FileWriter(file)) {
-                gson.toJson(timeline, writer);
-                Bukkit.getLogger().info("Recording saved to " + file.getAbsolutePath());
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-     */
     }
 
     public boolean isStopped() {
@@ -446,9 +427,6 @@ public class RecordingSession implements Listener, PacketListener {
 
     @Override
     public void onPacketSend(PacketSendEvent e) {
-        /*
-        Log block break stages
-         */
         if (e.getPacketType() == PacketType.Play.Server.BLOCK_BREAK_ANIMATION) {
             WrapperPlayServerBlockBreakAnimation packet = new WrapperPlayServerBlockBreakAnimation(e);
             Player p = e.getPlayer();
@@ -456,8 +434,6 @@ public class RecordingSession implements Listener, PacketListener {
 
             if (!(entity instanceof Player breaker))
                 return;
-
-
 
             if (!isTrackedPlayer(breaker.getUniqueId())) return;
 

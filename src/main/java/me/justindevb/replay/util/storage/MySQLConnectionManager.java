@@ -15,11 +15,11 @@ public class MySQLConnectionManager {
         config.setUsername(user);
         config.setPassword(password);
 
-        config.setMaximumPoolSize(10);        // max simultaneous connections
-        config.setMinimumIdle(2);             // keep some idle
-        config.setIdleTimeout(60000);         // 60s
-        config.setMaxLifetime(1800000);       // 30 minutes
-        config.setConnectionTimeout(10000);   // 10 seconds
+        config.setMaximumPoolSize(10);
+        config.setMinimumIdle(2);
+        config.setIdleTimeout(60000);
+        config.setMaxLifetime(1800000);
+        config.setConnectionTimeout(10000);
 
         this.dataSource = new HikariDataSource(config);
     }

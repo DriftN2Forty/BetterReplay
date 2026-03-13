@@ -8,7 +8,6 @@ import java.util.UUID;
 
 public class RecordedEntityFactory {
     public static RecordedEntity create(Map<String, Object> frame, Player viewer) {
-        // Get UUID
         Object uuidObj = frame.get("uuid");
         if (!(uuidObj instanceof String uuidStr)) {
             System.out.println("Malformed event: missing or invalid UUID");
@@ -16,7 +15,6 @@ public class RecordedEntityFactory {
         }
         UUID uuid = UUID.fromString(uuidStr);
 
-        // Get entity type
         Object typeObj = frame.get("etype");
         if (!(typeObj instanceof String typeStr)) {
             System.out.println("Malformed event: missing or invalid entity type for UUID " + uuid);
@@ -38,7 +36,6 @@ public class RecordedEntityFactory {
         } else {
             return new RecordedMob(uuid,  type, viewer);
         }
-        //TODO: Hopefully just implemented logic for recording and replaying mobs. Finish fleshing out SpawnFakeMob
     }
 }
 

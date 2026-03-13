@@ -15,9 +15,6 @@ public class EntityTypeMapper {
             EntityType peType = EntityTypes.getByName(bukkitType.name().toLowerCase());
             if (peType != null) ENTITY_TYPE_MAP.put(bukkitType, peType);
         }
-
-      //  ENTITY_TYPE_MAP.put(org.bukkit.entity.EntityType.ITEM, EntityTypes.ITEM);
-       // ENTITY_TYPE_MAP.put(org.bukkit.entity.EntityType.EXPERIENCE_ORB, EntityTypes.EXPERIENCE_ORB);
     }
 
     public static EntityType get(org.bukkit.entity.EntityType type) {

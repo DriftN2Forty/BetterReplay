@@ -18,7 +18,7 @@ public class ReplayManagerImpl implements ReplayManager {
 
     private final Replay replay;
     private final RecorderManager recorderManager;
-    private final ReplayStorage storage; // generic, file or MySQL
+    private final ReplayStorage storage;
 
     public ReplayManagerImpl(Replay replay, RecorderManager recorderManager) {
         this.replay = replay;
@@ -60,7 +60,6 @@ public class ReplayManagerImpl implements ReplayManager {
             return CompletableFuture.completedFuture(Optional.empty());
         }
 
-        // Check if the replay exists first
         return replay.getReplayStorage().replayExists(replayName)
                 .thenCompose(exists -> {
                     if (!exists) {
@@ -68,7 +67,6 @@ public class ReplayManagerImpl implements ReplayManager {
                         return CompletableFuture.completedFuture(Optional.<ReplaySession>empty());
                     }
 
-                    // Replay exists, load the timeline
                     return replay.getReplayStorage().loadReplay(replayName)
                             .thenApply(rawTimeline -> {
                                 if (rawTimeline == null || rawTimeline.isEmpty()) {
@@ -91,68 +89,18 @@ public class ReplayManagerImpl implements ReplayManager {
                 });
     }
 
-    // Helper to cast List<?> to List<Map<String, Object>>
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> castTimeline(List<?> raw) {
         return (List<Map<String, Object>>) (List<?>) raw;
     }
 
-    // Helper to run code on the main thread
     private void runSync(Runnable task) {
         if (Bukkit.isPrimaryThread()) {
             task.run();
         } else {
-            //Bukkit.getScheduler().runTask(replay, task);
             replay.getFoliaLib().getScheduler().runLater(task, 1L);
         }
     }
-
-
-
-   /* @Override
-    public CompletableFuture<Optional<ReplaySession>> startReplay(String replayName, Player viewer) {
-        if (viewer == null || replayName == null || replayName.isEmpty()) {
-            return CompletableFuture.completedFuture(Optional.empty());
-        }
-
-        // Load the replay timeline from storage
-        return replay.getReplayStorage().loadReplay(replayName)
-                .thenApply(rawTimeline -> {
-                    if (rawTimeline == null || rawTimeline.isEmpty()) {
-                        viewer.sendMessage("Replay not found or empty: " + replayName);
-                        return Optional.<ReplaySession>empty();
-                    }
-
-                    // Cast each element to Map<String, Object>
-                    @SuppressWarnings("unchecked")
-                    List<Map<String, Object>> timeline = (List<Map<String, Object>>) (List<?>) rawTimeline;
-
-                    // Create and start the session
-                    ReplaySession session = new ReplaySession(timeline, viewer, replay);
-                    session.start();
-
-                    return Optional.of(session);
-                })
-                .exceptionally(ex -> {
-                    ex.printStackTrace();
-                    viewer.sendMessage("Failed to start replay: " + replayName);
-                    return Optional.empty();
-                });
-    }
-*/
-
-
-   /* @Override
-    public Optional<ReplaySession> startReplay(File replayFile, Player viewer) {
-        if (replayFile == null || !replayFile.exists())
-            return Optional.empty();
-
-        ReplaySession session = new ReplaySession(replayFile, viewer, replay);
-        session.start();
-
-        return Optional.of(session);
-    }
-    */
 
     @Override
     public boolean stopReplay(Object replaySession) {
@@ -170,7 +118,6 @@ public class ReplayManagerImpl implements ReplayManager {
 
     @Override
     public CompletableFuture<List<String>> listSavedReplays() {
-        // Async-friendly, works for MySQL or files
         return storage.listReplays();
     }
 
@@ -189,72 +136,3 @@ public class ReplayManagerImpl implements ReplayManager {
                 });
     }
 }
-
-/*public class ReplayManagerImpl implements ReplayManager {
-
-    private final Replay replay;
-    private final RecorderManager recorderManager;
-    private final FileReplayStorage fileReplayStorage;
-
-    public ReplayManagerImpl(Replay replay, RecorderManager recorderManager) {
-        this.replay = replay;
-        this.recorderManager = recorderManager;
-        this.fileReplayStorage = Replay.getInstance().getReplayStorage();
-    }
-
-    @Override
-    public void startRecording(String name, Collection<Player> players, int durationSeconds) {
-        recorderManager.startSession(name, players, durationSeconds);
-    }
-
-    @Override
-    public boolean stopRecording(String name, boolean save) {
-        //TODO: Implement save logic
-        return recorderManager.stopSession(name, save);
-    }
-
-    @Override
-    public Collection<?> getActiveRecordings() {
-        return recorderManager.getActiveSessions().keySet();
-    }
-
-    @Override
-    public Optional<?> startReplay(File replayFile, Player viewer) {
-        if (replayFile == null || !replayFile.exists())
-            return Optional.empty();
-
-        ReplaySession session = new ReplaySession(replayFile, viewer, replay);
-        session.start();
-
-        return Optional.of(session);
-    }
-
-    @Override
-    public boolean stopReplay(Object replaySession) {
-        //TODO: Handle stop logic better, implement a way to force a stop including destroying all fake entities
-        if (!(replaySession instanceof ReplaySession session))
-            return false;
-
-        session.stop();
-
-        return true;
-    }
-
-    @Override
-    public Collection<?> getActiveReplays() {
-        return ReplayRegistry.getActiveSessions();
-    }
-
-    @Override
-    public List<String> listSavedReplays() {
-        return fileReplayStorage.listReplays();
-    }
-
-    @Override
-    public Optional<File> getSavedReplayFile(String name) {
-        return Optional.ofNullable(fileReplayStorage.getReplayFile(name));
-    }
-
-
-}
-*/
