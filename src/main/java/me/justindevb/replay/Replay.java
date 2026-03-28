@@ -12,9 +12,12 @@ import me.justindevb.replay.util.storage.FileReplayStorage;
 import me.justindevb.replay.util.storage.MySQLConnectionManager;
 import me.justindevb.replay.util.storage.MySQLReplayStorage;
 import me.justindevb.replay.util.storage.ReplayStorage;
+import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.geysermc.floodgate.api.FloodgateApi;
 
 import java.util.logging.Level;
 
@@ -26,6 +29,7 @@ public class Replay extends JavaPlugin {
     private ReplayCache replayCache;
     private ReplayManagerImpl manager;
     private FoliaLib foliaLib;
+    private FloodgateApi api;
 
     @Override
     public void onLoad() {
@@ -58,6 +62,17 @@ public class Replay extends JavaPlugin {
         initStorage();
 
         initBstats();
+
+        initFloodgate();
+    }
+
+    private void initFloodgate() {
+        Plugin plugin = Bukkit.getPluginManager().getPlugin("Floodgate");
+        if (plugin != null && plugin.isEnabled())
+            api = FloodgateApi.getInstance();
+        else
+            api = null;
+
     }
 
     @Override
@@ -90,6 +105,10 @@ public class Replay extends JavaPlugin {
 
     public ReplayStorage getReplayStorage() {
         return storage;
+    }
+
+    public FloodgateApi getFloodgateApi() {
+        return api;
     }
 
     private void initConfig() {

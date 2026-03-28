@@ -3,6 +3,7 @@ main: ${mainClass}
 version: ${project.version}
 author: ${author}
 depend: [packetevents]
+softdepend: [floodgate]
 api-version: 1.13
 folia-supported: true
 commands:
@@ -17,6 +18,7 @@ permissions:
       replay.stop: true
       replay.list: true
       replay.delete: true
+      replay.play: true
   replay.start:
     description: Allows starting a new recording
     default: op
@@ -25,6 +27,9 @@ permissions:
     default: op
   replay.list:
     description: Allows listing saved replays
+    default: op
+  replay.play:
+    description: Play a recording
     default: op
   replay.delete:
     description: Allows deleting saved replays

@@ -12,8 +12,10 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEn
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerInfoUpdate;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity;
 import io.github.retrooper.packetevents.util.SpigotConversionUtil;
+import me.justindevb.replay.Replay;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
+import org.geysermc.floodgate.api.FloodgateApi;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,7 +42,14 @@ public class SpawnFakePlayer {
 
         List<WrapperPlayServerPlayerInfoUpdate.PlayerInfo> playerInfoList = new ArrayList<>();
 
-        UserProfile userProfile = new UserProfile(fakeUuid, name, MojangAPIUtil.requestPlayerTextureProperties(profileUuid));
+        FloodgateApi api = Replay.getInstance().getFloodgateApi();
+        UserProfile userProfile;
+
+        if (api != null && api.isFloodgatePlayer(profileUuid)) {
+            userProfile = new UserProfile(fakeUuid, name, MojangAPIUtil.requestPlayerTextureProperties(api.getPlayer(profileUuid).getCorrectUniqueId()));
+        } else {
+            userProfile = new UserProfile(fakeUuid, name, MojangAPIUtil.requestPlayerTextureProperties(profileUuid));
+        }
 
         playerInfoList.add(new WrapperPlayServerPlayerInfoUpdate.PlayerInfo(userProfile));
 
