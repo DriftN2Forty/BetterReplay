@@ -2,12 +2,9 @@ package me.justindevb.replay.listeners;
 
 import com.github.retrooper.packetevents.event.PacketListener;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
-import com.github.retrooper.packetevents.event.PacketSendEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockBreakAnimation;
 import me.justindevb.replay.*;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
 public class PacketEventsListener implements PacketListener {
@@ -37,7 +34,7 @@ public class PacketEventsListener implements PacketListener {
         }
 
         if (clicked instanceof RecordedPlayer rp) {
-            Bukkit.getScheduler().runTask(Replay.getInstance(), () -> {
+            replay.getFoliaLib().getScheduler().runNextTick(task -> {
                 rp.openInventoryForViewer(viewer);
             });
             event.setCancelled(true);

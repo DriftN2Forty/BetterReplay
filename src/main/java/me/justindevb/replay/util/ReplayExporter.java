@@ -1,6 +1,5 @@
 package me.justindevb.replay.util;
 
-// ReplayExporter.java
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
@@ -8,13 +7,11 @@ import java.io.*;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.zip.GZIPOutputStream;
-import java.util.Base64;
 
 public class ReplayExporter {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-    // Simple model classes used for export
     public static class ExportReplay {
         public int schemaVersion = 1;
         public int tickRate = 20;
@@ -24,7 +21,6 @@ public class ReplayExporter {
         public List<ExportEntity> entities = new ArrayList<>();
         public List<ExportChunk> chunks = new ArrayList<>();
         public List<Frame> frames = new ArrayList<>();
-        // optional raw packet timeline if you want to retain fidelity
         public List<Map<String,Object>> rawPackets = null;
     }
     public static class ExportEntity {
@@ -33,11 +29,11 @@ public class ReplayExporter {
         public String uuid;
         public String type;
         public String name;
-        public List<Map<String,String>> skin; // list of {name,value,signature}
+        public List<Map<String,String>> skin;
     }
     public static class ExportChunk {
         public int cx, cz;
-        public String data; // base64(gzip(nbt bytes))
+        public String data;
     }
     public static class Frame {
         public int tick;
@@ -54,12 +50,10 @@ public class ReplayExporter {
 
         ExportReplay export = new ExportReplay();
 
-        // Example metadata heuristics (you can override)
         export.world = "world";
         export.startTime = System.currentTimeMillis() / 1000L;
         export.durationTicks = estimateDurationTicks(timeline);
 
-        // 1) Build entity templates (first-seen event provides metadata)
         Map<Integer, ExportEntity> entityMap = new LinkedHashMap<>();
         int nextExportId = 1;
         for (Map<String,Object> ev : timeline) {
@@ -76,10 +70,8 @@ public class ReplayExporter {
                 e.name = nm != null ? nm.toString() : ("entity-" + serverId);
                 Object t = ev.get("etype");
                 e.type = t != null ? t.toString() : (ev.get("type") != null ? ev.get("type").toString() : "UNKNOWN");
-                // skin: if you recorded texture properties as 'textures' in frames, capture them
-                Object textures = ev.get("textures"); // adapt to your recording format
+                Object textures = ev.get("textures");
                 if (textures instanceof List) {
-                    // assume each item is Map with name,value,signature
                     List<Map<String,String>> skinProps = new ArrayList<>();
                     for (Object o : (List)textures) {
                         if (o instanceof Map) {
@@ -98,7 +90,6 @@ public class ReplayExporter {
         }
         export.entities.addAll(entityMap.values());
 
-        // 2) Convert timeline to per-tick frames with normalized events
         Map<Integer, Frame> frames = new LinkedHashMap<>();
         for (Map<String,Object> ev : timeline) {
             Number tickN = (Number) ev.get("tick");
@@ -110,15 +101,8 @@ public class ReplayExporter {
         }
         export.frames.addAll(frames.values());
 
-        // 3) OPTIONAL: include chunks if your recording has them
-        // If you store chunk NBT bytes as raw byte[] in a sidecar map, encode them:
-        // Example: Map<String, byte[]> recordedChunks = ...  (key "cx,cz")
-        // for (Map.Entry<String,byte[]> entry: recordedChunks.entrySet()) { ... base64(GZIP(bytes)) ... }
+        export.rawPackets = timeline;
 
-        // 4) Optionally keep raw packets (if you want high-fidelity re-injection later)
-        export.rawPackets = timeline; // WARNING: can be huge
-
-        // 5) write JSON (optionally gzipped)
         if (gzipOutput) {
             try (FileOutputStream fos = new FileOutputStream(out);
                  GZIPOutputStream gos = new GZIPOutputStream(fos);
@@ -165,7 +149,6 @@ public class ReplayExporter {
                 out.put("z", raw.get("z"));
                 out.put("yaw", raw.get("yaw"));
                 out.put("pitch", raw.get("pitch"));
-                // optional: velocity and onGround if present
                 if (raw.get("vx") != null) out.put("vx", raw.get("vx"));
                 if (raw.get("vy") != null) out.put("vy", raw.get("vy"));
                 if (raw.get("vz") != null) out.put("vz", raw.get("vz"));
@@ -205,10 +188,8 @@ public class ReplayExporter {
                 out.put("message", raw.get("message"));
                 return out;
 
-            // add more cases here for other packet types you record
 
             default:
-                // If unknown, you may want to keep raw as-is under a 'raw' event
                 Map<String,Object> rawcopy = new LinkedHashMap<>(raw);
                 out.put("type","raw");
                 out.put("payload", rawcopy);

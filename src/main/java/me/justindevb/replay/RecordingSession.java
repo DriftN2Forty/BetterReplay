@@ -10,6 +10,7 @@ import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import me.justindevb.replay.util.ReplayObject;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
@@ -22,12 +23,18 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.util.io.BukkitObjectOutputStream;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
 import java.util.*;
+
+import static me.justindevb.replay.util.ItemStackSerializer.serializeItem;
 
 public class RecordingSession implements Listener, PacketListener {
 
@@ -36,8 +43,10 @@ public class RecordingSession implements Listener, PacketListener {
     private final File file;
     private final Gson gson;
     private final Set<UUID> trackedPlayers;
+    private final Map<UUID, EntityType> trackedEntities = new HashMap<>();
     private final List<Map<String, Object>> timeline = new ArrayList<>();
 
+    private static final double NEARBY_RADIUS_SQUARED = 32.0 * 32.0;
     private int tick = 0;
     private int durationTicks = -1;
     private boolean stopped = false;
@@ -59,7 +68,6 @@ public class RecordingSession implements Listener, PacketListener {
         Bukkit.getLogger().info("Started recording: " + name + " for " + trackedPlayers.size()
                 + " player(s), duration=" + (durationTicks == -1 ? "∞" : durationTicks / 20 + "s"));
 
-        // Register Bukkit listeners for this session
         Bukkit.getPluginManager().registerEvents(this, replay);
 
         captureInitialInventory();
@@ -69,13 +77,11 @@ public class RecordingSession implements Listener, PacketListener {
     public void tick() {
         if (stopped) return;
 
-        // Stop automatically after duration
         if (durationTicks != -1 && tick >= durationTicks) {
             stop(true);
             return;
         }
 
-        // Capture player positions each tick
         for (UUID uuid : trackedPlayers) {
             Player p = Bukkit.getPlayer(uuid);
             if (p == null || !p.isOnline()) continue;
@@ -87,14 +93,36 @@ public class RecordingSession implements Listener, PacketListener {
             moveEvent.put("name", p.getName());
             moveEvent.put("etype", EntityType.PLAYER);
             moveEvent.put("uuid", uuid.toString());
+            moveEvent.put("world", p.getWorld().getName());
             moveEvent.put("x", loc.getX());
             moveEvent.put("y", loc.getY());
             moveEvent.put("z", loc.getZ());
             moveEvent.put("yaw", loc.getYaw());
             moveEvent.put("pitch", loc.getPitch());
+
+            moveEvent.put("pose", p.getPose().name());
+
             timeline.add(moveEvent);
         }
-        //TODO: For when I work on this next. Replays are back to showing a player moving, and it's logging sneak events, but not showing them in the replay. That is what I need to work on next. Don't focus on entityIds
+
+        for (Map.Entry<UUID, EntityType> entry : trackedEntities.entrySet()) {
+            UUID uuid = entry.getKey();
+            Entity e = Bukkit.getEntity(uuid);
+            if (e == null || e.isDead()) continue;
+
+            Map<String, Object> moveEvent = new HashMap<>();
+            moveEvent.put("tick", tick);
+            moveEvent.put("type", "entity_move");
+            moveEvent.put("uuid", uuid.toString());
+            moveEvent.put("etype", e.getType().name());
+            moveEvent.put("world", e.getWorld().getName());
+            moveEvent.put("x", e.getLocation().getX());
+            moveEvent.put("y", e.getLocation().getY());
+            moveEvent.put("z", e.getLocation().getZ());
+            moveEvent.put("yaw", e.getLocation().getYaw());
+            moveEvent.put("pitch", e.getLocation().getPitch());
+            timeline.add(moveEvent);
+        }
 
         tick++;
     }
@@ -107,6 +135,7 @@ public class RecordingSession implements Listener, PacketListener {
         event.put("tick", tick);
         event.put("type", "block_break");
         event.put("uuid", e.getPlayer().getUniqueId().toString());
+        event.put("world", e.getBlock().getWorld().getName());
         event.put("x", e.getBlock().getX());
         event.put("y", e.getBlock().getY());
         event.put("z", e.getBlock().getZ());
@@ -121,6 +150,7 @@ public class RecordingSession implements Listener, PacketListener {
         event.put("tick", tick);
         event.put("type", "block_break_complete");
         event.put("uuid", e.getPlayer().getUniqueId().toString());
+        event.put("world", e.getBlock().getWorld().getName());
         event.put("x", e.getBlock().getX());
         event.put("y", e.getBlock().getY());
         event.put("z", e.getBlock().getZ());
@@ -145,7 +175,6 @@ public class RecordingSession implements Listener, PacketListener {
 
     }
 
-
     @EventHandler(priority = EventPriority.MONITOR)
     public void onBlockPlace(BlockPlaceEvent e) {
         if (!trackedPlayers.contains(e.getPlayer().getUniqueId())) return;
@@ -154,6 +183,7 @@ public class RecordingSession implements Listener, PacketListener {
         event.put("tick", tick);
         event.put("type", "block_place");
         event.put("uuid", e.getPlayer().getUniqueId().toString());
+        event.put("world", e.getBlock().getWorld().getName());
         event.put("x", e.getBlock().getX());
         event.put("y", e.getBlock().getY());
         event.put("z", e.getBlock().getZ());
@@ -165,6 +195,8 @@ public class RecordingSession implements Listener, PacketListener {
         if (!(e.getDamager() instanceof Player p)) return;
         if (!trackedPlayers.contains(p.getUniqueId())) return;
 
+        Entity entity = e.getEntity();
+
         Map<String, Object> event = new HashMap<>();
         event.put("tick", tick);
         event.put("type", "attack");
@@ -172,7 +204,25 @@ public class RecordingSession implements Listener, PacketListener {
         if (e.getEntity() instanceof Player target) {
             event.put("targetUuid", target.getUniqueId().toString());
         }
+
+        event.put("entityUuid", entity.getUniqueId().toString());
+        event.put("entityType", entity.getType().name());
         timeline.add(event);
+
+        if (!(entity instanceof Player) && !trackedEntities.containsKey(entity.getUniqueId())) {
+            trackedEntities.put(entity.getUniqueId(), entity.getType());
+
+            Map<String, Object> spawnEvent = new HashMap<>();
+            spawnEvent.put("tick", tick);
+            spawnEvent.put("type", "entity_spawn");
+            spawnEvent.put("uuid", entity.getUniqueId().toString());
+            spawnEvent.put("etype", entity.getType().name());
+            spawnEvent.put("world", entity.getWorld().getName());
+            spawnEvent.put("x", entity.getLocation().getX());
+            spawnEvent.put("y", entity.getLocation().getY());
+            spawnEvent.put("z", entity.getLocation().getZ());
+            timeline.add(spawnEvent);
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -211,7 +261,6 @@ public class RecordingSession implements Listener, PacketListener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntityDamaged(EntityDamageEvent e) {
-        // Only record entities we’re tracking
         if (!isTrackedPlayer(e.getEntity().getUniqueId())) return;
         Map<String, Object> event = new HashMap<>();
         event.put("tick", tick);
@@ -224,20 +273,66 @@ public class RecordingSession implements Listener, PacketListener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
+    public void onEntitySpawn(org.bukkit.event.entity.EntitySpawnEvent e) {
+        if (!isNearbyTrackedPlayer(e.getEntity().getLocation())) return;
+
+        UUID uuid = e.getEntity().getUniqueId();
+        if (trackedEntities.containsKey(uuid)) return;
+
+        trackedEntities.put(uuid, e.getEntityType());
+
+        Map<String, Object> spawnEvent = new HashMap<>();
+        spawnEvent.put("tick", tick);
+        spawnEvent.put("type", "entity_spawn");
+        spawnEvent.put("uuid", uuid.toString());
+        spawnEvent.put("etype", e.getEntityType().name());
+        spawnEvent.put("world", e.getLocation().getWorld().getName());
+        spawnEvent.put("x", e.getEntity().getLocation().getX());
+        spawnEvent.put("y", e.getEntity().getLocation().getY());
+        spawnEvent.put("z", e.getEntity().getLocation().getZ());
+        timeline.add(spawnEvent);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
     public void onEntityDeath(EntityDeathEvent e) {
         Entity entity = e.getEntity();
 
-        // Only record entities we are tracking
         UUID uuid = entity.getUniqueId();
-        if (!isTrackedPlayer(uuid)) return;
+        if (!trackedEntities.containsKey(uuid)) return;
 
         Map<String, Object> event = new HashMap<>();
         event.put("tick", tick);
         event.put("type", "entity_death");
         event.put("uuid", uuid.toString());
+        event.put("etype", e.getEntityType().name());
+        event.put("world", entity.getLocation().getWorld().getName());
         event.put("x", entity.getLocation().getX());
         event.put("y", entity.getLocation().getY());
         event.put("z", entity.getLocation().getZ());
+
+        timeline.add(event);
+
+        if (!(e instanceof Player))
+            trackedEntities.remove(uuid);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerDeath(PlayerDeathEvent e) {
+        UUID uuid = e.getPlayer().getUniqueId();
+
+        Player p = e.getPlayer();
+
+        if (!trackedPlayers.contains(uuid)) return;
+
+        Map<String, Object> event = new HashMap<>();
+        event.put("tick", tick);
+        event.put("type", "entity_death");
+        event.put("uuid", uuid.toString());
+        event.put("etype", e.getEntityType().name());
+        event.put("world", p.getWorld().getName());
+        event.put("x", p.getLocation().getX());
+        event.put("y", p.getLocation().getY());
+        event.put("z", p.getLocation().getZ());
 
         timeline.add(event);
     }
@@ -258,16 +353,37 @@ public class RecordingSession implements Listener, PacketListener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onHeldItemSwap(PlayerItemHeldEvent e) {
-        Player p = (Player) e.getPlayer();
+        Player p = e.getPlayer();
         if (!trackedPlayers.contains(p.getUniqueId())) return;
 
+        UUID uuid = p.getUniqueId();
         Map<String, Object> event = new HashMap<>();
         event.put("tick", tick);
         event.put("type", "inventory_update");
-        event.put("uuid", p.getUniqueId().toString());
-        event.putAll(captureInventory(p));
+        event.put("uuid", uuid.toString());
+
+        ItemStack mainHand = p.getInventory().getItem(e.getNewSlot());
+        ItemStack offHand = p.getInventory().getItemInOffHand();
+
+        event.put("mainHand", serializeItem(mainHand));
+        event.put("offHand", serializeItem(offHand));
 
         timeline.add(event);
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent e) {
+        Player p = e.getPlayer();
+
+        if (trackedPlayers.contains(p.getUniqueId())) {
+            Map<String, Object> event = new HashMap<>();
+            event.put("tick", tick);
+            event.put("type", "player_quit");
+            event.put("uuid", p.getUniqueId().toString());
+
+            timeline.add(event);
+            trackedPlayers.remove(p.getUniqueId());
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -310,17 +426,6 @@ public class RecordingSession implements Listener, PacketListener {
                     ex.printStackTrace();
                     return null;
                 });
-
-
-    /*    if (save) {
-            try (FileWriter writer = new FileWriter(file)) {
-                gson.toJson(timeline, writer);
-                Bukkit.getLogger().info("Recording saved to " + file.getAbsolutePath());
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-     */
     }
 
     public boolean isStopped() {
@@ -357,9 +462,6 @@ public class RecordingSession implements Listener, PacketListener {
 
     @Override
     public void onPacketSend(PacketSendEvent e) {
-        /*
-        Log block break stages
-         */
         if (e.getPacketType() == PacketType.Play.Server.BLOCK_BREAK_ANIMATION) {
             WrapperPlayServerBlockBreakAnimation packet = new WrapperPlayServerBlockBreakAnimation(e);
             Player p = e.getPlayer();
@@ -368,9 +470,6 @@ public class RecordingSession implements Listener, PacketListener {
             if (!(entity instanceof Player breaker))
                 return;
 
-
-
-            // Only care if the entity is one of our tracked players
             if (!isTrackedPlayer(breaker.getUniqueId())) return;
 
             int stage = packet.getDestroyStage();
@@ -390,37 +489,25 @@ public class RecordingSession implements Listener, PacketListener {
         }
     }
 
-    private List<Map<String, Object>> serializeItems(ItemStack[] items) {
-        List<Map<String, Object>> list = new ArrayList<>();
-        for (ItemStack item : items) {
-            list.add(serializeItem(item));
-        }
-        return list;
-    }
-
     private Map<String, Object> captureInventory(Player p) {
         Map<String, Object> invSnapshot = new HashMap<>();
 
-        // Main and offhand
         invSnapshot.put("mainHand", serializeItem(p.getInventory().getItemInMainHand()));
         invSnapshot.put("offHand", serializeItem(p.getInventory().getItemInOffHand()));
 
-        // Armor
-        invSnapshot.put("armor", List.of(
-                serializeItem(p.getInventory().getBoots()),
-                serializeItem(p.getInventory().getLeggings()),
-                serializeItem(p.getInventory().getChestplate()),
-                serializeItem(p.getInventory().getHelmet())
-        ));
+        List<String> armor = new ArrayList<>(4);
+        armor.add(serializeItem(p.getInventory().getBoots()));
+        armor.add(serializeItem(p.getInventory().getLeggings()));
+        armor.add(serializeItem(p.getInventory().getChestplate()));
+        armor.add(serializeItem(p.getInventory().getHelmet()));
+        invSnapshot.put("armor", armor);
 
-        // Full inventory slots
-        List<Map<String, Object>> items = new ArrayList<>();
+        List<String> contents = new ArrayList<>();
         for (ItemStack item : p.getInventory().getContents()) {
-            items.add(serializeItem(item));
+            contents.add(serializeItem(item));
         }
-        invSnapshot.put("contents", items);
+        invSnapshot.put("contents", contents);
 
-        // Add to timeline
         Map<String, Object> event = new HashMap<>();
         event.put("tick", tick);
         event.put("type", "inventory_update");
@@ -431,7 +518,38 @@ public class RecordingSession implements Listener, PacketListener {
         return invSnapshot;
     }
 
-    private Map<String, Object> serializeItem(ItemStack item) {
+
+    /*private Map<String, Object> captureInventory(Player p) {
+        Map<String, Object> invSnapshot = new HashMap<>();
+
+        invSnapshot.put("mainHand", serializeItem(p.getInventory().getItemInMainHand()));
+        invSnapshot.put("offHand", serializeItem(p.getInventory().getItemInOffHand()));
+
+        List<Map<String, Object>> armor = new ArrayList<>(4);
+        armor.add(serializeItem(p.getInventory().getBoots()));
+        armor.add(serializeItem(p.getInventory().getLeggings()));
+        armor.add(serializeItem(p.getInventory().getChestplate()));
+        armor.add(serializeItem(p.getInventory().getHelmet()));
+        invSnapshot.put("armor", armor);
+
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (ItemStack item : p.getInventory().getContents()) {
+            items.add(serializeItem(item));
+        }
+        invSnapshot.put("contents", items);
+
+        Map<String, Object> event = new HashMap<>();
+        event.put("tick", tick);
+        event.put("type", "inventory_update");
+        event.put("uuid", p.getUniqueId().toString());
+        event.put("inventory", invSnapshot);
+
+        timeline.add(event);
+        return invSnapshot;
+    }
+     */
+
+   /* private Map<String, Object> serializeItem(ItemStack item) {
         if (item == null) return null;
 
         Map<String, Object> map = new HashMap<>();
@@ -440,6 +558,7 @@ public class RecordingSession implements Listener, PacketListener {
         map.put("meta", item.hasItemMeta() ? item.getItemMeta().serialize() : null);
         return map;
     }
+    */
 
     private Map<String, Object> serializeLocation(org.bukkit.Location loc) {
         Map<String, Object> map = new HashMap<>();
@@ -452,6 +571,26 @@ public class RecordingSession implements Listener, PacketListener {
         return map;
     }
 
+    private boolean isNearbyTrackedPlayer(Location spawnLoc) {
+        if (spawnLoc == null || spawnLoc.getWorld() == null) {
+            return false;
+        }
+
+        World spawnWorld = spawnLoc.getWorld();
+
+        for (UUID uuid : Set.copyOf(trackedPlayers)) {
+            Player tracked = Bukkit.getPlayer(uuid);
+            if (tracked == null) continue;
+
+            if (tracked.getWorld() != spawnWorld) continue;
+
+            if (tracked.getLocation().distanceSquared(spawnLoc) <= NEARBY_RADIUS_SQUARED) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
 
 }

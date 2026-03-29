@@ -2,7 +2,6 @@ package me.justindevb.replay.util.storage;
 
 import com.google.gson.Gson;
 import me.justindevb.replay.Replay;
-import org.bukkit.Bukkit;
 
 import javax.sql.DataSource;
 import java.io.*;
@@ -27,7 +26,7 @@ public class MySQLReplayStorage implements ReplayStorage {
     }
 
     private void init() {
-        Bukkit.getScheduler().runTaskAsynchronously(replay, () -> {
+        replay.getFoliaLib().getScheduler().runAsync(task -> {
             try (Connection conn = dataSource.getConnection();
                  Statement stmt = conn.createStatement()) {
 

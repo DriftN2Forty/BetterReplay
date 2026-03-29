@@ -12,18 +12,16 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerDe
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity;
 import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
+import com.tcoded.folialib.wrapper.task.WrappedTask;
 import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import io.github.retrooper.packetevents.util.SpigotReflectionUtil;
 import me.justindevb.replay.api.events.ReplayStartEvent;
 import me.justindevb.replay.api.events.ReplayStopEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.OfflinePlayer;
+import org.bukkit.*;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Pose;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
@@ -38,24 +36,24 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
-import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.util.io.BukkitObjectInputStream;
 
-import java.io.File;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.*;
 
+import static me.justindevb.replay.util.ItemStackSerializer.deserializeItem;
+
 public class ReplaySession implements Listener, PacketListener {
-    //private final File file;
     private final Player viewer;
     private final Replay replay;
-    private final Gson gson = new Gson();
 
-    private int replayTaskId = -1;
+    private WrappedTask replayTask = null;
 
     private List<Map<String, Object>> timeline;
-    private List<Integer> trackedEntityIds = new ArrayList<>();
-    Map<UUID, RecordedEntity> recordedEntities = new HashMap<>();
+    private final Set<Integer> trackedEntityIds = new HashSet<>();
+    private final Set<UUID> deadEntities = new HashSet<>();
+    private final Map<UUID, RecordedEntity> recordedEntities = new HashMap<>();
     private int tick = 0;
     private boolean paused = false;
     private ItemStack[] viewerInventory;
@@ -77,12 +75,15 @@ public class ReplaySession implements Listener, PacketListener {
 
         ReplayRegistry.add(this);
         copyInventory();
+
         Map<String, Object> firstLocationEvent = timeline.stream()
-                .filter(e -> e.containsKey("x") && e.containsKey("y") && e.containsKey("z"))
+                .filter(e -> e.containsKey("world") && e.containsKey("x") && e.containsKey("y") && e.containsKey("z"))
                 .findFirst()
                 .orElse(null);
 
         if (firstLocationEvent != null) {
+            String sWorld = asString(firstLocationEvent.get("world"));
+            World world = Bukkit.getWorld(sWorld);
             Double x = asDouble(firstLocationEvent.get("x"));
             Double y = asDouble(firstLocationEvent.get("y"));
             Double z = asDouble(firstLocationEvent.get("z"));
@@ -90,205 +91,168 @@ public class ReplaySession implements Listener, PacketListener {
             Float pitch = asFloat(firstLocationEvent.get("pitch"));
 
             if (x != null && y != null && z != null) {
-                viewer.teleport(new Location(viewer.getWorld(), x, y, z, yaw, pitch));
+                replay.getFoliaLib().getScheduler().teleportAsync(viewer, new Location(world, x, y, z, yaw, pitch));
             }
         }
 
         giveReplayControls(viewer);
 
-     //   Bukkit.getPluginManager().callEvent(new ReplayStartEvent(viewer, file, this));
+        Bukkit.getPluginManager().callEvent(new ReplayStartEvent(viewer, this));
 
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                replayTaskId = getTaskId();
-                if (tick >= timeline.size()) {
-                    cancel();
-                    stop();
-                    return;
-                }
-
-                if (viewer == null || !viewer.isOnline()) {
-                    cancel();
-                    recordedEntities.values().forEach(RecordedEntity::destroy);
-                    recordedEntities.clear();
-                    return;
-                }
-
-                Map<String, Object> event = timeline.get(tick);
-
-                // Validate UUID
-                Object uuidObj = event.get("uuid");
-                if (!(uuidObj instanceof String)) {
-                    tick++;
-                    System.out.println("malformed event: uuid missing");
-                    return;
-                }
-                UUID uuid = UUID.fromString((String) event.get("uuid"));
-                RecordedEntity recorded = recordedEntities.computeIfAbsent(uuid, id -> {
-                    Double x = asDouble(event.get("x")), y = asDouble(event.get("y")), z = asDouble(event.get("z"));
-                    if (x == null || y == null || z == null) return null; // skip if missing coordinates
-
-                    Location initialLoc = new Location(viewer.getWorld(), x, y, z,
-                            asFloat(event.get("yaw")), asFloat(event.get("pitch")));
-
-                    RecordedEntity entity = RecordedEntityFactory.create(event, viewer);
-                    if (entity == null) {
-                        System.out.println("Malformed event: missing or invalid entity type for UUID " + uuid);
-                        return null;
-                    }
-
-                    entity.spawn(initialLoc);
-                    if (entity instanceof RecordedPlayer rp) {
-                        // Pull tick 0 inventory from timeline
-                        Map<String, Object> tick0Inventory = getInventorySnapshotForPlayer(uuid);
-                        if (tick0Inventory != null) {
-                            rp.updateInventory(tick0Inventory); // This sends the equipment packet
-                        }
-                    }
-
-                    return entity;
-                });
-
-                if (recorded != null) handleEvent(recorded, event);
-
-                if (!paused)
-                    tick++;
-
+        replay.getFoliaLib().getScheduler().runTimer(task -> {
+            if (paused) {
                 sendActionBar();
+                return;
             }
-        }.runTaskTimer(replay, 1L, 1L);
+            replayTask = task;
 
 
-    }
-
-
-
-/*  public ReplaySession(File file, Player viewer, Replay replay) {
-        this.file = file;
-        this.viewer = viewer;
-        this.replay = replay;
-        Bukkit.getPluginManager().registerEvents(this, Replay.getInstance());
-
-    }
-
-    public void start() {
-        viewer.sendMessage("Starting replay: " + file.getName());
-        try {
-            String json = Files.readString(file.toPath());
-            timeline = gson.fromJson(json, new TypeToken<List<Map<String, Object>>>() {
-            }.getType());
-        } catch (IOException e) {
-            e.printStackTrace();
-            return;
-        }
-
-        if (!timeline.isEmpty()) {
-            ReplayRegistry.add(this);
-            copyInventory();
-            Map<String, Object> firstLocationEvent = timeline.stream()
-                    .filter(e -> e.containsKey("x") && e.containsKey("y") && e.containsKey("z"))
-                    .findFirst()
-                    .orElse(null);
-
-            if (firstLocationEvent != null) {
-                Double x = asDouble(firstLocationEvent.get("x"));
-                Double y = asDouble(firstLocationEvent.get("y"));
-                Double z = asDouble(firstLocationEvent.get("z"));
-                Float yaw = asFloat(firstLocationEvent.get("yaw"));
-                Float pitch = asFloat(firstLocationEvent.get("pitch"));
-
-                if (x != null && y != null && z != null) {
-                    viewer.teleport(new Location(viewer.getWorld(), x, y, z, yaw, pitch));
-                }
+            if (tick >= timeline.size()) {
+                task.cancel();
+                stop();
+                return;
             }
-        }
 
-        giveReplayControls(viewer);
+            if (viewer == null || !viewer.isOnline()) {
+                task.cancel();
+                recordedEntities.values().forEach(RecordedEntity::destroy);
+                recordedEntities.clear();
+                return;
+            }
 
-        Bukkit.getPluginManager().callEvent(new ReplayStartEvent(viewer, file, this));
+            Map<String, Object> firstEvent = timeline.get(tick);
+            Object tickObj = firstEvent.get("tick");
 
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (tick >= timeline.size()) {
-                    cancel();
-                    stop();
-                    return;
-                }
+            if (!(tickObj instanceof Number)) {
+                tick++;
+                return;
+            }
 
-                if (viewer == null || !viewer.isOnline()) {
-                    cancel();
-                    recordedEntities.values().forEach(RecordedEntity::destroy);
-                    recordedEntities.clear();
-                    return;
-                }
+            int recordedTick = ((Number) tickObj).intValue();
 
+            while (tick < timeline.size()) {
                 Map<String, Object> event = timeline.get(tick);
 
-                // Validate UUID
-                Object uuidObj = event.get("uuid");
-                if (!(uuidObj instanceof String)) {
+                Object eventTickObj = event.get("tick");
+                if (!(eventTickObj instanceof Number)) break;
+
+                int eventTick = ((Number) eventTickObj).intValue();
+                if (eventTick != recordedTick) break;
+
+                String type = (String) event.get("type");
+                if (type == null) {
                     tick++;
-                    System.out.println("malformed event: uuid missing");
-                    return;
+                    continue;
                 }
-                UUID uuid = UUID.fromString((String) event.get("uuid"));
-                RecordedEntity recorded = recordedEntities.computeIfAbsent(uuid, id -> {
-                    Double x = asDouble(event.get("x")), y = asDouble(event.get("y")), z = asDouble(event.get("z"));
-                    if (x == null || y == null || z == null) return null; // skip if missing coordinates
 
-                    Location initialLoc = new Location(viewer.getWorld(), x, y, z,
-                            asFloat(event.get("yaw")), asFloat(event.get("pitch")));
-
-                    RecordedEntity entity = RecordedEntityFactory.create(event, viewer);
-                    if (entity == null) {
-                        System.out.println("Malformed event: missing or invalid entity type for UUID " + uuid);
-                        return null;
-                    }
-
-                    entity.spawn(initialLoc);
-                    if (entity instanceof RecordedPlayer rp) {
-                        // Pull tick 0 inventory from timeline
-                        Map<String, Object> tick0Inventory = getInventorySnapshotForPlayer(uuid);
-                        if (tick0Inventory != null) {
-                            rp.updateInventory(tick0Inventory); // This sends the equipment packet
-                        }
-                    }
-
-                    return entity;
-                });
-
-                if (recorded != null) handleEvent(recorded, event);
-
-                if (!paused)
+                Object uuidObj = event.get("uuid");
+                if (!(uuidObj instanceof String uuidStr)) {
                     tick++;
+                    continue;
+                }
+
+                UUID uuid;
+                try {
+                    uuid = UUID.fromString(uuidStr);
+                } catch (IllegalArgumentException ex) {
+                    tick++;
+                    continue;
+                }
+
+                if ("player_quit".equals(type)) {
+                    if (recordedEntities.get(uuid) instanceof RecordedPlayer rp) {
+                        viewer.sendMessage("[BetterReplay] " + rp.getName() + " disconnected");
+                    }
+                    RecordedEntity entity = recordedEntities.remove(uuid);
+                    if (entity != null) {
+                        entity.destroy();
+                        trackedEntityIds.remove(entity.getFakeEntityId());
+                    }
+                    tick++;
+                    continue;
+                }
+
+                if (deadEntities.contains(uuid) && ("player_move".equals(type) || "entity_move".equals(type))) {
+                    tick++;
+                    continue;
+                }
+
+                RecordedEntity recorded = recordedEntities.get(uuid);
+
+                if (recorded != null && recorded.isDestroyed()) {
+                    recordedEntities.remove(uuid);
+                    tick++;
+                    continue;
+                }
+
+                if (recorded == null) {
+                    Double x = asDouble(event.get("x"));
+                    Double y = asDouble(event.get("y"));
+                    Double z = asDouble(event.get("z"));
+
+                    String worldName = asString(event.get("world"));
+                    if (x == null || y == null || z == null || worldName == null) {
+                        tick++;
+                        continue;
+                    }
+
+                    World world = Bukkit.getWorld(worldName);
+                    if (world == null) {
+                        tick++;
+                        continue;
+                    }
+
+                    Location initialLoc = new Location(
+                            world,
+                            x,
+                            y,
+                            z,
+                            asFloat(event.get("yaw")),
+                            asFloat(event.get("pitch"))
+                    );
+
+                    recorded = RecordedEntityFactory.create(event, viewer);
+                    if (recorded == null) {
+                        tick++;
+                        continue;
+                    }
+
+                    recorded.spawn(initialLoc);
+                    recordedEntities.put(uuid, recorded);
+
+                    if (recorded instanceof RecordedPlayer rp) {
+                        Map<String, Object> inv = getInventorySnapshotForPlayer(uuid);
+                        if (inv != null) rp.updateInventory(inv);
+                    }
+                }
+
+                handleEvent(recorded, event);
+
+                tick++;
             }
-        }.runTaskTimer(replay, 1L, 1L);
+            sendActionBar();
+
+        },1L, 1L);
     }
-    */
+
 
     public void stop() {
         viewer.sendActionBar(Component.empty());
 
         Bukkit.getPluginManager().callEvent(new ReplayStopEvent(viewer, this));
         recordedEntities.values().forEach(RecordedEntity::destroy);
-        clearFakeItems();
         recordedEntities.clear();
 
-        if (replayTaskId != -1) {
-            Bukkit.getScheduler().cancelTask(replayTaskId);
-            replayTaskId = -1;
+        clearFakeItems();
+        restoreInventory();
+        if (replayTask != null) {
+            replay.getFoliaLib().getScheduler().cancelTask(replayTask);
+            replayTask = null;
         }
 
         viewer.sendMessage("Replay finished");
-
         ReplayRegistry.remove(this);
-
         HandlerList.unregisterAll(this);
-
-        restoreInventory();
-
     }
 
     private void copyInventory() {
@@ -316,16 +280,30 @@ public class ReplaySession implements Listener, PacketListener {
 
     private void handleEvent(RecordedEntity entity, Map<String, Object> event) {
         String type = (String) event.get("type");
-        if (type == null) return; // skip malformed event
+        if (type == null) return;
 
         switch (type) {
             case "player_move", "entity_move" -> {
-                Double x = asDouble(event.get("x")), y = asDouble(event.get("y")), z = asDouble(event.get("z"));
+                World world = Bukkit.getWorld(asString(event.get("world")));
+                Double x = asDouble(event.get("x"));
+                Double y = asDouble(event.get("y"));
+                Double z = asDouble(event.get("z"));
                 if (x == null || y == null || z == null) return;
 
-                Location loc = new Location(viewer.getWorld(), x, y, z,
+                Location loc = new Location(world, x, y, z,
                         asFloat(event.get("yaw")), asFloat(event.get("pitch")));
                 entity.moveTo(loc);
+
+                if (event.containsKey("pose") && entity instanceof RecordedPlayer rp) {
+                    String poseName = (String) event.get("pose");
+                    if (poseName != null) {
+                        try {
+                            Pose pose = Pose.valueOf(poseName);
+                            rp.setPose(pose);
+                        } catch (IllegalArgumentException ignored) {
+                        }
+                    }
+                }
             }
             case "sneak_start", "sneak_stop", "attack", "block_place", "block_break" -> {
                 if (entity instanceof RecordedPlayer rp) {
@@ -354,7 +332,9 @@ public class ReplaySession implements Listener, PacketListener {
             }
             case "entity_death" -> {
                 entity.showDeath(event);
+                deadEntities.add(entity.uuid);
                 entity.destroy();
+                recordedEntities.remove(entity.uuid);
             }
             case "inventory_update" -> {
                 if (entity instanceof RecordedPlayer rp) {
@@ -362,17 +342,53 @@ public class ReplaySession implements Listener, PacketListener {
                 }
             }
             case "item_drop" -> {
-                Map<String, Object> itemMap = (Map<String, Object>) event.get("item");
+              //  Map<String, Object> itemMap = (Map<String, Object>) event.get("item");
                 Map<String, Object> locMap = (Map<String, Object>) event.get("location");
 
-                ItemStack stack = deserializeItem(itemMap);
+               // ItemStack stack = deserializeItem(itemMap);
+                ItemStack stack = deserializeItem(event.get("item"));
                 Location loc = deserializeLocation(locMap);
 
                 if (stack != null && loc != null)
                     spawnFakeDroppedItem(stack, loc);
 
             }
+            case "mob_spawn" -> {
+                spawnFakeMob(entity, event);
+            }
+            case "player_quit" -> {
+                UUID uuid = UUID.fromString((String) event.get("uuid"));
+
+                recordedEntities.remove(uuid);
+                if (entity == null) {
+                    return;
+                }
+
+                entity.destroy();
+                trackedEntityIds.remove(entity.getFakeEntityId());
+
+            }
         }
+    }
+
+    private void spawnFakeMob(RecordedEntity entity, Map<String, Object> event) {
+        Location loc = new Location(Bukkit.getWorld(asString(event.get("world"))),
+                asDouble(event.get("x")),
+                asDouble(event.get("y")),
+                asDouble(event.get("z")),
+                asFloat(event.get("yaw")),
+                asFloat(event.get("pitch")));
+
+        entity.spawn(loc);
+
+        trackedEntityIds.add(entity.getFakeEntityId());
+        recordedEntities.put(entity.uuid, entity);
+
+        WrapperPlayServerEntityMetadata meta = new WrapperPlayServerEntityMetadata(
+                entity.getFakeEntityId(),
+                Collections.emptyList()
+        );
+        PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, meta);
     }
 
     private Double asDouble(Object obj) {
@@ -381,6 +397,10 @@ public class ReplaySession implements Listener, PacketListener {
 
     private Float asFloat(Object obj) {
         return obj instanceof Number n ? n.floatValue() : 0f;
+    }
+
+    private String asString(Object obj) {
+        return obj instanceof String s ? String.valueOf(s) : null;
     }
 
     private void giveReplayControls(Player viewer) {
@@ -511,15 +531,13 @@ public class ReplaySession implements Listener, PacketListener {
         if (recorded == null)
             return;
 
-        player.teleport(recorded.getCurrentLocation());
+        replay.getFoliaLib().getScheduler().teleportAsync(player, recorded.getCurrentLocation());
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        if (!event.getPlayer().equals(viewer))
-            return;
-
-        stop();
+        if (event.getPlayer().equals(viewer))
+            stop();
     }
 
 
@@ -613,7 +631,8 @@ public class ReplaySession implements Listener, PacketListener {
         return ReplayRegistry.contains(this);
     }
 
-    private ItemStack deserializeItem(Map<String, Object> map) {
+
+   /* private ItemStack deserializeItem(Map<String, Object> map) {
         if (map == null) return null;
 
         Material type = Material.valueOf((String) map.get("type"));
@@ -631,6 +650,7 @@ public class ReplaySession implements Listener, PacketListener {
 
         return item;
     }
+    */
 
     private Location deserializeLocation(Map<String, Object> map) {
         if (map == null)

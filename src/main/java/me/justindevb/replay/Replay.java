@@ -2,17 +2,23 @@ package me.justindevb.replay;
 
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.PacketListenerPriority;
+import com.tcoded.folialib.FoliaLib;
+import io.github.retrooper.packetevents.bstats.bukkit.Metrics;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import me.justindevb.replay.api.ReplayAPI;
 import me.justindevb.replay.listeners.PacketEventsListener;
 import me.justindevb.replay.util.ReplayCache;
+import me.justindevb.replay.util.UpdateChecker;
 import me.justindevb.replay.util.storage.FileReplayStorage;
 import me.justindevb.replay.util.storage.MySQLConnectionManager;
 import me.justindevb.replay.util.storage.MySQLReplayStorage;
 import me.justindevb.replay.util.storage.ReplayStorage;
+import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.geysermc.floodgate.api.FloodgateApi;
 
 import java.util.logging.Level;
 
@@ -20,10 +26,10 @@ public class Replay extends JavaPlugin {
     private static Replay instance;
     private RecorderManager recorderManager;
     private ReplayStorage storage = null;
-  //  private FileReplayStorage fileReplayStorage;
     private MySQLConnectionManager connectionManager;
     private ReplayCache replayCache;
     private ReplayManagerImpl manager;
+    private FoliaLib foliaLib;
 
     @Override
     public void onLoad() {
@@ -38,9 +44,9 @@ public class Replay extends JavaPlugin {
     public void onEnable() {
         instance = this;
         PacketEvents.getAPI().init();
+        foliaLib = new FoliaLib(this);
 
         recorderManager = new RecorderManager(this);
-      //  fileReplayStorage = new FileReplayStorage(this);
         ReplayCommand replayCommand = new ReplayCommand(recorderManager);
         initConfig();
 
@@ -54,6 +60,11 @@ public class Replay extends JavaPlugin {
         ReplayAPI.init(manager = new ReplayManagerImpl(this, recorderManager));
 
         initStorage();
+
+        initBstats();
+
+
+        checkForUpdate();
     }
 
     @Override
@@ -84,11 +95,6 @@ public class Replay extends JavaPlugin {
         return recorderManager;
     }
 
-  /*  public FileReplayStorage getReplayStorage() {
-        return fileReplayStorage;
-    }
-*/
-
     public ReplayStorage getReplayStorage() {
         return storage;
     }
@@ -102,12 +108,24 @@ public class Replay extends JavaPlugin {
 
     private void initGeneralConfigSettings() {
         FileConfiguration config = getConfig();
+        config.addDefault("General.Check-Update", true);
         config.addDefault("General.Storage-Type", "file");  // Valid options: "file","mysql"
         config.addDefault("General.MySQL.host", "host");
         config.addDefault("General.MySQL.port", 3306);
         config.addDefault("General.MySQL.database", "database");
         config.addDefault("General.MySQL.user", "username");
         config.addDefault("General.MySQL.password", "password");
+    }
+
+    private void checkForUpdate() {
+        if (!getConfig().getBoolean("General.Check-Update"))
+            return;
+        new UpdateChecker(this, 133445).getVersion(version -> {
+            if (this.getPluginMeta().getVersion().equals(version))
+                getLogger().log(Level.INFO, "You are up to date!");
+            else
+                getLogger().log(Level.INFO, "There is an update available! Download at: https://www.spigotmc.org/resources/betterreplay.133445/");
+        });
     }
 
     private void initStorage() {
@@ -141,5 +159,14 @@ public class Replay extends JavaPlugin {
 
     public ReplayManagerImpl getReplayManagerImpl() {
         return manager;
+    }
+
+    public void initBstats() {
+        int pluginId = 29341;
+        Metrics metrics = new Metrics(this, pluginId);
+    }
+
+    public FoliaLib getFoliaLib() {
+        return foliaLib;
     }
 }

@@ -5,6 +5,7 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerDe
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityStatus;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerInfoRemove;
 import io.github.retrooper.packetevents.util.SpigotReflectionUtil;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
@@ -19,6 +20,7 @@ public abstract class RecordedEntity {
     protected final Player viewer;
     protected int fakeEntityId;
     protected Location currentLocation;
+    private boolean destroyed = false;
 
     protected RecordedEntity(UUID uuid, EntityType type, Player viewer) {
         this.uuid = uuid;
@@ -33,13 +35,23 @@ public abstract class RecordedEntity {
     public abstract void spawn(Location location);
     public abstract void moveTo(Location location);
     public void destroy() {
-        PacketEvents.getAPI().getPlayerManager().sendPacket(viewer,
-                new WrapperPlayServerDestroyEntities(new int[]{fakeEntityId}));
+        if (destroyed) return;
+        destroyed = true;
+
+        if (fakeEntityId > 0) {
+            try {
+                PacketEvents.getAPI().getPlayerManager().sendPacket(viewer,
+                        new WrapperPlayServerDestroyEntities(new int[]{fakeEntityId}));
+            } catch (IndexOutOfBoundsException e) {
+                Replay.getInstance().getLogger().warning("Tried to destroy entity " + fakeEntityId + " but it doesn't exist for viewer " + viewer.getName());
+            }
+        }
 
         if (this instanceof RecordedPlayer rp) {
             if (!viewer.getUniqueId().equals(rp.getUuid())) {
-               WrapperPlayServerPlayerInfoRemove remove =  new WrapperPlayServerPlayerInfoRemove(Collections.singletonList(rp.getUuid()));
-               PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, remove);
+                WrapperPlayServerPlayerInfoRemove remove =
+                        new WrapperPlayServerPlayerInfoRemove(Collections.singletonList(rp.getUuid()));
+                PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, remove);
             }
         }
     }
@@ -54,8 +66,17 @@ public abstract class RecordedEntity {
     public void showDeath(Map<String, Object> event) {
         if (fakeEntityId == 0) return;
 
+        if (this instanceof RecordedPlayer rp) {
+            viewer.sendMessage("[BetterReplay] " + rp.getName() + " died");
+        }
+
         WrapperPlayServerEntityStatus packet = new WrapperPlayServerEntityStatus(fakeEntityId, (byte) 3);
+        packet.setStatus(3);
         PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, packet);
+    }
+
+    public boolean isDestroyed() {
+        return destroyed;
     }
 
     public Location getCurrentLocation() {

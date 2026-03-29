@@ -3,18 +3,14 @@ package me.justindevb.replay.util.storage;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import me.justindevb.replay.Replay;
-import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
 public class FileReplayStorage implements ReplayStorage {
 
@@ -86,32 +82,3 @@ public class FileReplayStorage implements ReplayStorage {
         });
     }
 }
-
-/*public class FileReplayStorage {
-    private final File replayFolder;
-
-    public FileReplayStorage(JavaPlugin plugin) {
-        this.replayFolder = new File(plugin.getDataFolder(), "replays");
-        if (!replayFolder.exists())
-            replayFolder.mkdirs();
-    }
-
-    public List<String> listReplays() {
-        String[] files = replayFolder.list((dir, name) -> name.endsWith(".json"));
-        if (files == null)
-            return Collections.emptyList();
-        return Arrays.stream(files)
-                .map(name -> name.substring(0, name.length() - 5))
-                .collect(Collectors.toList());
-    }
-
-    public boolean deleteReplay(String name) {
-        File f = new File(replayFolder, name + ".json");
-        return f.exists() && f.delete();
-    }
-
-    public File getReplayFile(String name) {
-        return new File(replayFolder, name + ".json");
-    }
-}
-*/

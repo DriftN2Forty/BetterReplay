@@ -1,18 +1,17 @@
 package me.justindevb.replay;
 
+import com.tcoded.folialib.wrapper.task.WrappedTask;
 import me.justindevb.replay.api.events.RecordingStartEvent;
 import me.justindevb.replay.api.events.RecordingStopEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitTask;
 
-import java.io.File;
 import java.util.*;
 
 public class RecorderManager {
     private final Replay replay;
     private final Map<String, RecordingSession> activeSessions = new HashMap<>();
-    private BukkitTask tickTask;
+    private WrappedTask tickTask;
 
     public RecorderManager(Replay replay) {
         this.replay = replay;
@@ -30,7 +29,7 @@ public class RecorderManager {
         activeSessions.put(name, session);
 
         if (tickTask == null) {
-            tickTask = Bukkit.getScheduler().runTaskTimer(replay, this::tickAll, 1L, 1L);
+            tickTask = replay.getFoliaLib().getScheduler().runTimer(this::tickAll, 1L, 1L);
         }
         return true;
     }
@@ -80,7 +79,8 @@ public class RecorderManager {
                     @SuppressWarnings("unchecked")
                     List<Map<String, Object>> timeline = (List<Map<String, Object>>) rawTimeline;
 
-                    Bukkit.getScheduler().runTask(replay, () -> {
+                   // Bukkit.getScheduler().runTask(replay, () -> {
+                    replay.getFoliaLib().getScheduler().runNextTick(task -> {
                         new ReplaySession(timeline, viewer, replay).start();
                     });
                 })
@@ -91,16 +91,6 @@ public class RecorderManager {
                 });
     }
 
-
- /*   public void replaySession(String name, Player viewer) {
-        File file = new File(replay.getDataFolder(), "replays/" + name + ".json");
-        if (!file.exists()) {
-            viewer.sendMessage("Replay not found: " + name);
-            return;
-        }
-        new ReplaySession(file, viewer, replay).start();
-    }
-  */
 
     public void shutdown() {
         for (RecordingSession s : activeSessions.values())
