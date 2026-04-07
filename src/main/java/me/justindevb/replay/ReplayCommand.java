@@ -12,6 +12,7 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
@@ -94,8 +95,9 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
                     p.sendMessage("§c/replay stop <name>");
                     return true;
                 }
-                if (manager.stopSession(args[1], true)) {
-                    p.sendMessage("§aStopped recording session: " + args[1]);
+                String sessionName = joinArgs(args, 1);
+                if (manager.stopSession(sessionName, true)) {
+                    p.sendMessage("§aStopped recording session: " + sessionName);
                 } else {
                     p.sendMessage("§cNo active session with that name!");
                 }
@@ -109,9 +111,10 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
                     p.sendMessage("§c/replay play <name>");
                     return true;
                 }
+                String replayName = joinArgs(args, 1);
                 Replay.getInstance()
                         .getReplayManagerImpl()
-                        .startReplay(args[1], p);
+                    .startReplay(replayName, p);
 
                 return true;
             }
@@ -201,7 +204,7 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage("Usage: /replay delete <name>");
                     return true;
                 }
-                String name = args[1];
+                String name = joinArgs(args, 1);
                 ReplayObject replayObject = new ReplayObject(name, null, Replay.getInstance().getReplayStorage());
                 replayObject.delete()
                         .thenCompose(success -> Replay.getInstance().getReplayStorage().listReplays()
@@ -247,7 +250,7 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
                     .toList();
         }
 
-        if (args.length == 2 && (args[0].equalsIgnoreCase("delete") || args[0].equalsIgnoreCase("play"))) {
+        if (args.length >= 2 && (args[0].equalsIgnoreCase("delete") || args[0].equalsIgnoreCase("play"))) {
             if (!sender.hasPermission("replay." + args[0].toLowerCase()))
                 return Collections.emptyList();
 
@@ -255,21 +258,25 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
                     .getReplayCache()
                     .getReplays();
 
+            String prefix = joinArgs(args, 1).toLowerCase();
+
             return cachedReplays.stream()
-                    .filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))
+                    .filter(name -> name.toLowerCase().startsWith(prefix))
                     .toList();
         }
 
-        if (args.length == 2 && args[0].equalsIgnoreCase("stop")) {
+        if (args.length >= 2 && args[0].equalsIgnoreCase("stop")) {
             if (!sender.hasPermission("replay.stop"))
                 return Collections.emptyList();
+
+            String prefix = joinArgs(args, 1).toLowerCase();
 
             return Replay.getInstance()
                     .getRecorderManager()
                     .getActiveSessions()
                     .keySet()
                     .stream()
-                    .filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))
+                    .filter(name -> name.toLowerCase().startsWith(prefix))
                     .toList();
         }
 
@@ -289,6 +296,13 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
         }
 
         return Collections.emptyList();
+    }
+
+    private String joinArgs(String[] args, int fromIndex) {
+        if (fromIndex >= args.length) {
+            return "";
+        }
+        return String.join(" ", Arrays.copyOfRange(args, fromIndex, args.length)).trim();
     }
 
 }
