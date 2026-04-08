@@ -489,9 +489,10 @@ public class ReplaySession implements Listener, PacketListener {
         }
 
         Location blockLoc = new Location(world, x, y, z);
+        playFallbackBlockCrackAnimation(blockLoc);
         replay.getFoliaLib().getScheduler().runLater(
                 () -> viewer.sendBlockChange(blockLoc, Material.AIR.createBlockData()),
-                1L
+            3L
         );
     }
 
@@ -525,6 +526,25 @@ public class ReplaySession implements Listener, PacketListener {
         } catch (IllegalArgumentException ignored) {
         }
     }
+
+        private void playFallbackBlockCrackAnimation(Location blockLoc) {
+        viewer.sendBlockDamage(blockLoc, 0.35f);
+
+        replay.getFoliaLib().getScheduler().runLater(
+            () -> viewer.sendBlockDamage(blockLoc, 0.7f),
+            1L
+        );
+
+        replay.getFoliaLib().getScheduler().runLater(
+            () -> viewer.sendBlockDamage(blockLoc, 1.0f),
+            2L
+        );
+
+        replay.getFoliaLib().getScheduler().runLater(
+            () -> viewer.sendBlockDamage(blockLoc, 0.0f),
+            4L
+        );
+        }
 
     private void restoreReplayBlockStates() {
         for (Map.Entry<BlockKey, String> entry : originalBlockStates.entrySet()) {
