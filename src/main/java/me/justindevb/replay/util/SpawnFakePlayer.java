@@ -20,6 +20,7 @@ import org.bukkit.entity.Player;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 public class SpawnFakePlayer {
@@ -48,18 +49,21 @@ public class SpawnFakePlayer {
     public void spawn() {
 
         Replay.getInstance().getFoliaLib().getScheduler().runAsync(task -> {
-            UUID skinUuid = profileUuid;
+            UUID skinUuid = FloodgateHook.getCorrectUUID(profileUuid);
             List<TextureProperty> textures = Collections.emptyList();
 
-            if (profileUuid.version() == 4) {
+            try {
+                textures = MojangAPIUtil.requestPlayerTextureProperties(skinUuid);
+            } catch (Exception ignored) {
+                textures = Collections.emptyList();
+            }
+
+            if ((textures == null || textures.isEmpty()) && !skinUuid.equals(profileUuid)) {
                 try {
-                    textures = MojangAPIUtil.requestPlayerTextureProperties(skinUuid);
+                    textures = MojangAPIUtil.requestPlayerTextureProperties(profileUuid);
                 } catch (Exception ignored) {
+                    textures = Collections.emptyList();
                 }
-            } else {
-                skinUuid = FloodgateHook.getCorrectUUID(profileUuid);
-                if (skinUuid != profileUuid)
-                    textures = MojangAPIUtil.requestPlayerTextureProperties(skinUuid);
             }
 
             if (textures == null || textures.isEmpty()) {
@@ -72,12 +76,34 @@ public class SpawnFakePlayer {
                 }
             }
 
-            UserProfile profile = new UserProfile(fakeUuid, name, textures);
+            UserProfile profile = new UserProfile(fakeUuid, sanitizeProfileName(name), textures);
 
             Replay.getInstance().getFoliaLib().getScheduler().runNextTick(syncTask -> {
                 spawnNow(profile);
             });
         });
+    }
+
+    private String sanitizeProfileName(String rawName) {
+        if (rawName == null || rawName.isBlank()) {
+            return buildFallbackName();
+        }
+
+        String sanitized = rawName.replaceAll("[^A-Za-z0-9_]", "_");
+        if (sanitized.isBlank()) {
+            return buildFallbackName();
+        }
+
+        if (sanitized.length() > 16) {
+            sanitized = sanitized.substring(0, 16);
+        }
+
+        return sanitized;
+    }
+
+    private String buildFallbackName() {
+        String suffix = fakeUuid.toString().replace("-", "").substring(0, 8).toLowerCase(Locale.ROOT);
+        return "Replay_" + suffix;
     }
 
     private void spawnNow(UserProfile profile) {
