@@ -428,8 +428,7 @@ public class ReplaySession implements Listener, PacketListener {
     }
 
     private void primeInitialBrokenBlockStates() {
-        Set<BlockKey> primed = new HashSet<>();
-        Map<BlockKey, String> firstMutationByKey = new HashMap<>();
+        Map<BlockKey, Map<String, Object>> firstMutationEventByKey = new HashMap<>();
 
         for (Map<String, Object> event : timeline) {
             String type = asString(event.get("type"));
@@ -442,9 +441,15 @@ public class ReplaySession implements Listener, PacketListener {
                 continue;
             }
 
-            firstMutationByKey.putIfAbsent(key, type);
+            firstMutationEventByKey.putIfAbsent(key, event);
+        }
 
-            if (!"block_break".equals(type) || !"block_break".equals(firstMutationByKey.get(key))) {
+        for (Map.Entry<BlockKey, Map<String, Object>> entry : firstMutationEventByKey.entrySet()) {
+            BlockKey key = entry.getKey();
+            Map<String, Object> event = entry.getValue();
+            String type = asString(event.get("type"));
+
+            if (type == null) {
                 continue;
             }
 
@@ -452,9 +457,8 @@ public class ReplaySession implements Listener, PacketListener {
             Integer x = asInt(event.get("x"));
             Integer y = asInt(event.get("y"));
             Integer z = asInt(event.get("z"));
-            String blockData = asString(event.get("blockData"));
 
-            if (worldName == null || x == null || y == null || z == null || blockData == null) {
+            if (worldName == null || x == null || y == null || z == null) {
                 continue;
             }
 
@@ -463,12 +467,38 @@ public class ReplaySession implements Listener, PacketListener {
                 continue;
             }
 
-            if (!primed.add(key)) {
+            cacheOriginalBlockState(world, key);
+
+            if ("block_break".equals(type)) {
+                String blockData = asString(event.get("blockData"));
+                if (blockData != null) {
+                    sendBlockStateToViewer(world, x, y, z, blockData);
+                }
                 continue;
             }
 
-            cacheOriginalBlockState(world, key);
-            sendBlockStateToViewer(world, x, y, z, blockData);
+            String replacedBlockData = asString(event.get("replacedBlockData"));
+            if (replacedBlockData != null) {
+                sendBlockStateToViewer(world, x, y, z, replacedBlockData);
+                continue;
+            }
+
+            // Backward compatibility for recordings without replacedBlockData.
+            String placedBlockData = asString(event.get("blockData"));
+            if (placedBlockData == null) {
+                placedBlockData = asString(event.get("block"));
+            }
+
+            if (placedBlockData == null) {
+                continue;
+            }
+
+            String currentBlockData = world.getBlockAt(x, y, z).getBlockData().getAsString();
+            if (!placedBlockData.equals(currentBlockData)) {
+                continue;
+            }
+
+            sendBlockStateToViewer(world, x, y, z, Material.AIR.createBlockData().getAsString());
         }
     }
 
