@@ -429,6 +429,7 @@ public class ReplaySession implements Listener, PacketListener {
 
     private void primeInitialBrokenBlockStates() {
         Map<BlockKey, Map<String, Object>> firstMutationEventByKey = new HashMap<>();
+        String airBlockData = Material.AIR.createBlockData().getAsString();
 
         for (Map<String, Object> event : timeline) {
             String type = asString(event.get("type"));
@@ -467,10 +468,14 @@ public class ReplaySession implements Listener, PacketListener {
                 continue;
             }
 
-            cacheOriginalBlockState(world, key);
-
             if ("block_break".equals(type)) {
                 String blockData = asString(event.get("blockData"));
+                if (blockData != null) {
+                    seedOriginalBlockState(key, blockData);
+                } else {
+                    cacheOriginalBlockState(world, key);
+                }
+
                 if (blockData != null) {
                     sendBlockStateToViewer(world, x, y, z, blockData);
                 }
@@ -479,6 +484,7 @@ public class ReplaySession implements Listener, PacketListener {
 
             String replacedBlockData = asString(event.get("replacedBlockData"));
             if (replacedBlockData != null) {
+                seedOriginalBlockState(key, replacedBlockData);
                 sendBlockStateToViewer(world, x, y, z, replacedBlockData);
                 continue;
             }
@@ -495,11 +501,21 @@ public class ReplaySession implements Listener, PacketListener {
 
             String currentBlockData = world.getBlockAt(x, y, z).getBlockData().getAsString();
             if (!placedBlockData.equals(currentBlockData)) {
+                cacheOriginalBlockState(world, key);
                 continue;
             }
 
-            sendBlockStateToViewer(world, x, y, z, Material.AIR.createBlockData().getAsString());
+            seedOriginalBlockState(key, airBlockData);
+            sendBlockStateToViewer(world, x, y, z, airBlockData);
         }
+    }
+
+    private void seedOriginalBlockState(BlockKey key, String blockData) {
+        if (blockData == null) {
+            return;
+        }
+
+        originalBlockStates.putIfAbsent(key, blockData);
     }
 
     private void enrichBlockBreakStageTimeline() {
