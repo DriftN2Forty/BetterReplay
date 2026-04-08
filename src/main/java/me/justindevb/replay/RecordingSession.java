@@ -119,7 +119,7 @@ public class RecordingSession implements Listener, PacketListener {
         tick++;
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent e) {
         if (!trackedPlayers.contains(e.getPlayer().getUniqueId())) return;
 
@@ -131,6 +131,7 @@ public class RecordingSession implements Listener, PacketListener {
         event.put("x", e.getBlock().getX());
         event.put("y", e.getBlock().getY());
         event.put("z", e.getBlock().getZ());
+        event.put("blockData", e.getBlock().getBlockData().getAsString());
         timeline.add(event);
     }
 
@@ -179,6 +180,7 @@ public class RecordingSession implements Listener, PacketListener {
         event.put("x", e.getBlock().getX());
         event.put("y", e.getBlock().getY());
         event.put("z", e.getBlock().getZ());
+        event.put("blockData", e.getBlock().getBlockData().getAsString());
         timeline.add(event);
     }
 

@@ -49,11 +49,14 @@ public class ReplaySession implements Listener, PacketListener {
     private final Set<Integer> trackedEntityIds = new HashSet<>();
     private final Set<UUID> deadEntities = new HashSet<>();
     private final Map<UUID, RecordedEntity> recordedEntities = new HashMap<>();
+    private final Map<BlockKey, String> originalBlockStates = new HashMap<>();
     private int tick = 0;
     private boolean paused = false;
     private ItemStack[] viewerInventory;
     private ItemStack[] viewerArmor;
     private ItemStack viewerOffHand;
+
+    private record BlockKey(String world, int x, int y, int z) {}
 
     public ReplaySession(List<Map<String, Object>> timeline, Player viewer, Replay replay) {
         this.timeline = timeline;
@@ -91,6 +94,7 @@ public class ReplaySession implements Listener, PacketListener {
         }
 
         giveReplayControls(viewer);
+        primeInitialBrokenBlockStates();
 
         Bukkit.getPluginManager().callEvent(new ReplayStartEvent(viewer, this));
 
@@ -239,6 +243,7 @@ public class ReplaySession implements Listener, PacketListener {
         recordedEntities.clear();
 
         clearFakeItems();
+        restoreReplayBlockStates();
         restoreInventory();
         if (replayTask != null) {
             replay.getFoliaLib().getScheduler().cancelTask(replayTask);
@@ -308,6 +313,15 @@ public class ReplaySession implements Listener, PacketListener {
                         case "block_place" -> rp.showBlockPlace(event);
                         case "block_break" -> rp.showBlockBreak(event);
                     }
+                }
+
+                if ("block_place".equals(type) || "block_break".equals(type)) {
+                    applyReplayBlockChange(event, type);
+                }
+            }
+            case "block_break_stage" -> {
+                if (entity instanceof RecordedPlayer rp) {
+                    rp.showBlockBreak(event);
                 }
             }
             case "swing" -> {
@@ -390,12 +404,108 @@ public class ReplaySession implements Listener, PacketListener {
         return obj instanceof Number n ? n.doubleValue() : null;
     }
 
+    private Integer asInt(Object obj) {
+        return obj instanceof Number n ? n.intValue() : null;
+    }
+
     private Float asFloat(Object obj) {
         return obj instanceof Number n ? n.floatValue() : 0f;
     }
 
     private String asString(Object obj) {
         return obj instanceof String s ? String.valueOf(s) : null;
+    }
+
+    private void primeInitialBrokenBlockStates() {
+        Set<BlockKey> primed = new HashSet<>();
+
+        for (Map<String, Object> event : timeline) {
+            if (!"block_break".equals(event.get("type"))) {
+                continue;
+            }
+
+            String worldName = asString(event.get("world"));
+            Integer x = asInt(event.get("x"));
+            Integer y = asInt(event.get("y"));
+            Integer z = asInt(event.get("z"));
+            String blockData = asString(event.get("blockData"));
+
+            if (worldName == null || x == null || y == null || z == null || blockData == null) {
+                continue;
+            }
+
+            World world = Bukkit.getWorld(worldName);
+            if (world == null) {
+                continue;
+            }
+
+            BlockKey key = new BlockKey(worldName, x, y, z);
+            if (!primed.add(key)) {
+                continue;
+            }
+
+            cacheOriginalBlockState(world, key);
+            sendBlockStateToViewer(world, x, y, z, blockData);
+        }
+    }
+
+    private void applyReplayBlockChange(Map<String, Object> event, String type) {
+        String worldName = asString(event.get("world"));
+        Integer x = asInt(event.get("x"));
+        Integer y = asInt(event.get("y"));
+        Integer z = asInt(event.get("z"));
+
+        if (worldName == null || x == null || y == null || z == null) {
+            return;
+        }
+
+        World world = Bukkit.getWorld(worldName);
+        if (world == null) {
+            return;
+        }
+
+        BlockKey key = new BlockKey(worldName, x, y, z);
+        cacheOriginalBlockState(world, key);
+
+        if ("block_place".equals(type)) {
+            String blockData = asString(event.get("blockData"));
+            if (blockData == null) {
+                blockData = asString(event.get("block"));
+            }
+
+            if (blockData != null) {
+                sendBlockStateToViewer(world, x, y, z, blockData);
+            }
+            return;
+        }
+
+        viewer.sendBlockChange(new Location(world, x, y, z), Material.AIR.createBlockData());
+    }
+
+    private void cacheOriginalBlockState(World world, BlockKey key) {
+        originalBlockStates.computeIfAbsent(
+                key,
+                ignored -> world.getBlockAt(key.x(), key.y(), key.z()).getBlockData().getAsString()
+        );
+    }
+
+    private void sendBlockStateToViewer(World world, int x, int y, int z, String blockData) {
+        try {
+            viewer.sendBlockChange(new Location(world, x, y, z), Bukkit.createBlockData(blockData));
+        } catch (IllegalArgumentException ignored) {
+        }
+    }
+
+    private void restoreReplayBlockStates() {
+        for (Map.Entry<BlockKey, String> entry : originalBlockStates.entrySet()) {
+            BlockKey key = entry.getKey();
+            World world = Bukkit.getWorld(key.world());
+            if (world == null) {
+                continue;
+            }
+            sendBlockStateToViewer(world, key.x(), key.y(), key.z(), entry.getValue());
+        }
+        originalBlockStates.clear();
     }
 
     private void giveReplayControls(Player viewer) {
