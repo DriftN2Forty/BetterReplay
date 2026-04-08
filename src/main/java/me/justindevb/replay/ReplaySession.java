@@ -921,8 +921,99 @@ public class ReplaySession implements Listener, PacketListener {
             rebuildReplayBlockStateUntil(targetIndex);
         }
 
+        syncEntityStatesAtIndex(targetIndex);
+
         tick = targetIndex;
         sendActionBar();
+    }
+
+    private void syncEntityStatesAtIndex(int targetIndex) {
+        Map<UUID, Map<String, Object>> firstEventByUUID = new LinkedHashMap<>();
+        Map<UUID, Map<String, Object>> lastLocationByUUID = new LinkedHashMap<>();
+        Set<UUID> shouldHaveQuitAtTarget = new HashSet<>();
+        Set<UUID> shouldBeDeadAtTarget = new HashSet<>();
+
+        int end = Math.min(targetIndex, timeline.size());
+        for (int i = 0; i < end; i++) {
+            Map<String, Object> event = timeline.get(i);
+            Object uuidObj = event.get("uuid");
+            if (!(uuidObj instanceof String uuidStr)) continue;
+            UUID uuid;
+            try {
+                uuid = UUID.fromString(uuidStr);
+            } catch (IllegalArgumentException ignored) {
+                continue;
+            }
+
+            String type = asString(event.get("type"));
+            firstEventByUUID.putIfAbsent(uuid, event);
+
+            switch (type != null ? type : "") {
+                case "player_move", "entity_move" -> lastLocationByUUID.put(uuid, event);
+                case "player_quit" -> shouldHaveQuitAtTarget.add(uuid);
+                case "entity_death" -> shouldBeDeadAtTarget.add(uuid);
+            }
+        }
+
+        // Rebuild deadEntities to reflect state at the seek target.
+        deadEntities.clear();
+        deadEntities.addAll(shouldBeDeadAtTarget);
+
+        Set<UUID> shouldExistAtTarget = new HashSet<>(firstEventByUUID.keySet());
+        shouldExistAtTarget.removeAll(shouldHaveQuitAtTarget);
+        shouldExistAtTarget.removeAll(shouldBeDeadAtTarget);
+
+        // Destroy entities that no longer belong at this point.
+        for (UUID uuid : new HashSet<>(recordedEntities.keySet())) {
+            if (!shouldExistAtTarget.contains(uuid)) {
+                RecordedEntity entity = recordedEntities.remove(uuid);
+                if (entity != null) {
+                    entity.destroy();
+                    trackedEntityIds.remove(entity.getFakeEntityId());
+                }
+            }
+        }
+
+        // Spawn entities that should exist but haven't been created yet.
+        for (UUID uuid : shouldExistAtTarget) {
+            if (recordedEntities.containsKey(uuid)) continue;
+            if (!lastLocationByUUID.containsKey(uuid)) continue;
+
+            Map<String, Object> firstEvent = firstEventByUUID.get(uuid);
+            Map<String, Object> locEvent = lastLocationByUUID.get(uuid);
+
+            Double x = asDouble(locEvent.get("x"));
+            Double y = asDouble(locEvent.get("y"));
+            Double z = asDouble(locEvent.get("z"));
+            String worldName = asString(locEvent.get("world"));
+            if (x == null || y == null || z == null || worldName == null) continue;
+            World world = Bukkit.getWorld(worldName);
+            if (world == null) continue;
+
+            RecordedEntity entity = RecordedEntityFactory.create(firstEvent, viewer);
+            if (entity == null) continue;
+
+            entity.spawn(new Location(world, x, y, z,
+                    asFloat(locEvent.get("yaw")), asFloat(locEvent.get("pitch"))));
+            recordedEntities.put(uuid, entity);
+            trackedEntityIds.add(entity.getFakeEntityId());
+        }
+
+        // Move all live entities to their last known position at the target index.
+        for (Map.Entry<UUID, Map<String, Object>> entry : lastLocationByUUID.entrySet()) {
+            RecordedEntity entity = recordedEntities.get(entry.getKey());
+            if (entity == null) continue;
+
+            Map<String, Object> event = entry.getValue();
+            World world = Bukkit.getWorld(asString(event.get("world")));
+            Double x = asDouble(event.get("x"));
+            Double y = asDouble(event.get("y"));
+            Double z = asDouble(event.get("z"));
+            if (world == null || x == null || y == null || z == null) continue;
+
+            entity.moveTo(new Location(world, x, y, z,
+                    asFloat(event.get("yaw")), asFloat(event.get("pitch"))));
+        }
     }
 
     private int getRecordedTickAtIndex(int index) {
