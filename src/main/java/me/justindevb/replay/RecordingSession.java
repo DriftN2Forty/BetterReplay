@@ -43,6 +43,7 @@ public class RecordingSession implements Listener, PacketListener {
     private final Map<UUID, EntityType> trackedEntities = new HashMap<>();
     private final List<Map<String, Object>> timeline = new ArrayList<>();
     private PacketListenerCommon packetListenerHandle;
+    private final Map<String, Integer> breakStageDedup = new HashMap<>();
 
     private static final double NEARBY_RADIUS_SQUARED = 32.0 * 32.0;
     private int tick = 0;
@@ -470,22 +471,41 @@ public class RecordingSession implements Listener, PacketListener {
         if (e.getPacketType() == PacketType.Play.Server.BLOCK_BREAK_ANIMATION) {
             WrapperPlayServerBlockBreakAnimation packet = new WrapperPlayServerBlockBreakAnimation(e);
             Player p = e.getPlayer();
-            Entity entity = SpigotConversionUtil.getEntityById(p.getWorld(), packet.getEntityId());
 
-            if (!(entity instanceof Player breaker))
-                return;
-
-            if (!isTrackedPlayer(breaker.getUniqueId())) return;
+            String world = p.getWorld().getName();
 
             int stage = packet.getDestroyStage();
             int x = packet.getBlockPosition().getX();
             int y = packet.getBlockPosition().getY();
             int z = packet.getBlockPosition().getZ();
 
+            String dedupKey = world + ":" + x + ":" + y + ":" + z + ":" + stage;
+            Integer lastTick = breakStageDedup.get(dedupKey);
+            if (lastTick != null && lastTick == tick) {
+                return;
+            }
+            breakStageDedup.put(dedupKey, tick);
+            if (breakStageDedup.size() > 4000) {
+                breakStageDedup.entrySet().removeIf(entry -> entry.getValue() < tick - 40);
+            }
+
+            String breakerUuid = null;
+            Entity entity = SpigotConversionUtil.getEntityById(p.getWorld(), packet.getEntityId());
+            if (entity instanceof Player breaker && isTrackedPlayer(breaker.getUniqueId())) {
+                breakerUuid = breaker.getUniqueId().toString();
+            }
+
+            if (breakerUuid == null && !isTrackedPlayer(p.getUniqueId())) {
+                return;
+            }
+
             Map<String, Object> event = new HashMap<>();
             event.put("tick", tick);
             event.put("type", "block_break_stage");
-            event.put("uuid", breaker.getUniqueId().toString());
+            if (breakerUuid != null) {
+                event.put("uuid", breakerUuid);
+            }
+            event.put("world", world);
             event.put("x", x);
             event.put("y", y);
             event.put("z", z);

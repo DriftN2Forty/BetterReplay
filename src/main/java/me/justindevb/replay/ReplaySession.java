@@ -9,11 +9,13 @@ import com.github.retrooper.packetevents.protocol.entity.type.EntityTypes;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerDestroyEntities;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockBreakAnimation;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity;
 import com.tcoded.folialib.wrapper.task.WrappedTask;
 import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import io.github.retrooper.packetevents.util.SpigotReflectionUtil;
+import com.github.retrooper.packetevents.util.Vector3i;
 import me.justindevb.replay.api.events.ReplayStartEvent;
 import me.justindevb.replay.api.events.ReplayStopEvent;
 import net.kyori.adventure.text.Component;
@@ -140,6 +142,12 @@ public class ReplaySession implements Listener, PacketListener {
 
                 String type = (String) event.get("type");
                 if (type == null) {
+                    tick++;
+                    continue;
+                }
+
+                if ("block_break_stage".equals(type)) {
+                    showGlobalBlockBreakStage(event);
                     tick++;
                     continue;
                 }
@@ -525,6 +533,28 @@ public class ReplaySession implements Listener, PacketListener {
             );
         } catch (IllegalArgumentException ignored) {
         }
+    }
+
+    private void showGlobalBlockBreakStage(Map<String, Object> event) {
+        String worldName = asString(event.get("world"));
+        if (worldName != null && !worldName.equals(viewer.getWorld().getName())) {
+            return;
+        }
+
+        Integer x = asInt(event.get("x"));
+        Integer y = asInt(event.get("y"));
+        Integer z = asInt(event.get("z"));
+        Integer stage = asInt(event.get("stage"));
+
+        if (x == null || y == null || z == null || stage == null) {
+            return;
+        }
+
+        int animationId = Objects.hash(worldName, x, y, z);
+        WrapperPlayServerBlockBreakAnimation breakAnim =
+            new WrapperPlayServerBlockBreakAnimation(animationId, new Vector3i(x, y, z), stage.byteValue());
+
+        PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, breakAnim);
     }
 
         private void playFallbackBlockCrackAnimation(Location blockLoc) {
