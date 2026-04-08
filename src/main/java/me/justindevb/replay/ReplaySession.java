@@ -52,6 +52,7 @@ public class ReplaySession implements Listener, PacketListener {
     private final Set<UUID> deadEntities = new HashSet<>();
     private final Map<UUID, RecordedEntity> recordedEntities = new HashMap<>();
     private final Map<BlockKey, String> originalBlockStates = new HashMap<>();
+    private final Map<BlockKey, Integer> lastStageTickByBlock = new HashMap<>();
     private int tick = 0;
     private boolean paused = false;
     private ItemStack[] viewerInventory;
@@ -74,6 +75,7 @@ public class ReplaySession implements Listener, PacketListener {
         }
 
         ReplayRegistry.add(this);
+        enrichBlockBreakStageTimeline();
         copyInventory();
 
         Map<String, Object> firstLocationEvent = timeline.stream()
@@ -457,11 +459,135 @@ public class ReplaySession implements Listener, PacketListener {
         }
     }
 
+    private void enrichBlockBreakStageTimeline() {
+        if (timeline == null || timeline.isEmpty()) {
+            return;
+        }
+
+        Map<BlockKey, Integer> breakStartTicks = new HashMap<>();
+        Map<BlockKey, List<Integer>> nativeStageTicks = new HashMap<>();
+
+        for (Map<String, Object> event : timeline) {
+            if (!"block_break_stage".equals(event.get("type"))) {
+                continue;
+            }
+
+            BlockKey key = blockKeyFromEvent(event);
+            Integer tickValue = asInt(event.get("tick"));
+            if (key == null || tickValue == null) {
+                continue;
+            }
+
+            nativeStageTicks.computeIfAbsent(key, ignored -> new ArrayList<>()).add(tickValue);
+        }
+
+        List<Map<String, Object>> synthesizedStages = new ArrayList<>();
+
+        for (Map<String, Object> event : timeline) {
+            String type = asString(event.get("type"));
+            Integer tickValue = asInt(event.get("tick"));
+            if (type == null || tickValue == null) {
+                continue;
+            }
+
+            if ("block_break_complete".equals(type) || "block_break_start".equals(type)) {
+                BlockKey key = blockKeyFromEvent(event);
+                if (key != null) {
+                    breakStartTicks.put(key, tickValue);
+                }
+                continue;
+            }
+
+            if (!"block_break".equals(type)) {
+                continue;
+            }
+
+            BlockKey key = blockKeyFromEvent(event);
+            if (key == null) {
+                continue;
+            }
+
+            Integer startTick = breakStartTicks.remove(key);
+            if (startTick == null || tickValue - startTick < 4) {
+                continue;
+            }
+
+            if (hasNativeStagesBetween(nativeStageTicks.get(key), startTick, tickValue)) {
+                continue;
+            }
+
+            String uuid = asString(event.get("uuid"));
+            int duration = tickValue - startTick;
+            for (int stage = 1; stage <= 9; stage++) {
+                int stageTick = startTick + (int) Math.floor((stage / 10.0) * duration);
+                if (stageTick <= startTick) {
+                    continue;
+                }
+                if (stageTick >= tickValue) {
+                    stageTick = tickValue - 1;
+                }
+                if (stageTick <= startTick) {
+                    continue;
+                }
+
+                Map<String, Object> stageEvent = new HashMap<>();
+                stageEvent.put("tick", stageTick);
+                stageEvent.put("type", "block_break_stage");
+                stageEvent.put("world", key.world());
+                stageEvent.put("x", key.x());
+                stageEvent.put("y", key.y());
+                stageEvent.put("z", key.z());
+                stageEvent.put("stage", stage);
+                if (uuid != null) {
+                    stageEvent.put("uuid", uuid);
+                }
+                synthesizedStages.add(stageEvent);
+            }
+        }
+
+        if (synthesizedStages.isEmpty()) {
+            return;
+        }
+
+        timeline = new ArrayList<>(timeline);
+        timeline.addAll(synthesizedStages);
+        timeline.sort(Comparator.comparingInt(event -> {
+            Integer tickValue = asInt(event.get("tick"));
+            return tickValue != null ? tickValue : Integer.MAX_VALUE;
+        }));
+    }
+
+    private boolean hasNativeStagesBetween(List<Integer> stageTicks, int startTick, int endTick) {
+        if (stageTicks == null || stageTicks.isEmpty()) {
+            return false;
+        }
+        for (Integer stageTick : stageTicks) {
+            if (stageTick != null && stageTick > startTick && stageTick < endTick) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private BlockKey blockKeyFromEvent(Map<String, Object> event) {
+        String worldName = asString(event.get("world"));
+        Integer x = asInt(event.get("x"));
+        Integer y = asInt(event.get("y"));
+        Integer z = asInt(event.get("z"));
+
+        if (worldName == null || x == null || y == null || z == null) {
+            return null;
+        }
+
+        return new BlockKey(worldName, x, y, z);
+    }
+
     private void applyReplayBlockChange(Map<String, Object> event, String type) {
         String worldName = asString(event.get("world"));
         Integer x = asInt(event.get("x"));
         Integer y = asInt(event.get("y"));
         Integer z = asInt(event.get("z"));
+        Integer eventTick = asInt(event.get("tick"));
 
         if (worldName == null || x == null || y == null || z == null) {
             return;
@@ -497,7 +623,11 @@ public class ReplaySession implements Listener, PacketListener {
         }
 
         Location blockLoc = new Location(world, x, y, z);
-        playFallbackBlockCrackAnimation(blockLoc);
+        Integer lastStageTick = lastStageTickByBlock.get(key);
+        boolean hasRecentStage = eventTick != null && lastStageTick != null && lastStageTick >= eventTick - 4;
+        if (!hasRecentStage) {
+            playFallbackBlockCrackAnimation(blockLoc);
+        }
         replay.getFoliaLib().getScheduler().runLater(
                 () -> viewer.sendBlockChange(blockLoc, Material.AIR.createBlockData()),
             3L
@@ -553,6 +683,12 @@ public class ReplaySession implements Listener, PacketListener {
         int animationId = Objects.hash(worldName, x, y, z);
         WrapperPlayServerBlockBreakAnimation breakAnim =
             new WrapperPlayServerBlockBreakAnimation(animationId, new Vector3i(x, y, z), stage.byteValue());
+
+        BlockKey key = new BlockKey(worldName != null ? worldName : viewer.getWorld().getName(), x, y, z);
+        Integer eventTick = asInt(event.get("tick"));
+        if (eventTick != null) {
+            lastStageTickByBlock.put(key, eventTick);
+        }
 
         PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, breakAnim);
     }
