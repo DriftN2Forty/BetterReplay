@@ -429,9 +429,22 @@ public class ReplaySession implements Listener, PacketListener {
 
     private void primeInitialBrokenBlockStates() {
         Set<BlockKey> primed = new HashSet<>();
+        Map<BlockKey, String> firstMutationByKey = new HashMap<>();
 
         for (Map<String, Object> event : timeline) {
-            if (!"block_break".equals(event.get("type"))) {
+            String type = asString(event.get("type"));
+            if (!"block_break".equals(type) && !"block_place".equals(type)) {
+                continue;
+            }
+
+            BlockKey key = blockKeyFromEvent(event);
+            if (key == null) {
+                continue;
+            }
+
+            firstMutationByKey.putIfAbsent(key, type);
+
+            if (!"block_break".equals(type) || !"block_break".equals(firstMutationByKey.get(key))) {
                 continue;
             }
 
@@ -450,7 +463,6 @@ public class ReplaySession implements Listener, PacketListener {
                 continue;
             }
 
-            BlockKey key = new BlockKey(worldName, x, y, z);
             if (!primed.add(key)) {
                 continue;
             }
