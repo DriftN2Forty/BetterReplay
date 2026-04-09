@@ -34,13 +34,19 @@ public class SpawnFakePlayer {
     private final Player viewer;
 
     private final UUID fakeUuid;
+    private final Runnable onSpawned;
 
     public SpawnFakePlayer(UUID profileUuid, String name, Location spawnLocation, Player viewer, int entityId) {
+        this(profileUuid, name, spawnLocation, viewer, entityId, null);
+    }
+
+    public SpawnFakePlayer(UUID profileUuid, String name, Location spawnLocation, Player viewer, int entityId, Runnable onSpawned) {
         this.profileUuid = profileUuid;
         this.name = name;
         this.spawnLocation = spawnLocation;
         this.viewer = viewer;
         this.entityId = entityId;
+        this.onSpawned = onSpawned;
 
         this.fakeUuid = UUID.randomUUID();
 
@@ -134,6 +140,10 @@ public class SpawnFakePlayer {
 
         sendDisplayNameMetadata();
         sendSkinMetadata();
+
+        if (onSpawned != null) {
+            onSpawned.run();
+        }
     }
 
     private void sendDisplayNameMetadata() {

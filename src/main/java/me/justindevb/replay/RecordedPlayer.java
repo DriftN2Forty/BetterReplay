@@ -56,13 +56,11 @@ public class RecordedPlayer extends RecordedEntity {
 
     @Override
     public void spawn(Location location) {
-        SpawnFakePlayer fakePlayer = new SpawnFakePlayer(uuid, name, location, viewer, super.fakeEntityId);
+        SpawnFakePlayer fakePlayer = new SpawnFakePlayer(uuid, name, location, viewer, super.fakeEntityId, () -> {
+            this.spawned = true;
+            sendMetadata();
+        });
         this.fakeProfileUuid = fakePlayer.getFakeUuid();
-        this.spawned = true;
-
-        Replay.getInstance().getFoliaLib().getScheduler().runLater(this::sendMetadata, 1L);
-
-
     }
 
     private void sendMetadata() {
