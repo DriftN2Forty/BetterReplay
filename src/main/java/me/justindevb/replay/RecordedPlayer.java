@@ -72,8 +72,12 @@ public class RecordedPlayer extends RecordedEntity {
         PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadata);
 
         if (currentInventory != null && !currentInventory.isEmpty()) {
-            if (spawned)
-                showInventorySnapshot(currentInventory);
+            // Reset last-known state so equipment packets are re-sent now that
+            // the client has had time to process the entity spawn.
+            lastMainHand = null;
+            lastOffHand = null;
+            Arrays.fill(lastArmor, new ItemStack(Material.AIR));
+            showInventorySnapshot(currentInventory);
         }
     }
 

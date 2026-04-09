@@ -137,6 +137,8 @@ public class RecordingSession implements Listener, PacketListener {
             if (p == null || !p.isOnline()) continue;
 
             List<String> currentSerialized = new ArrayList<>();
+            // Include held slot so switching selected hotbar slot triggers a diff
+            currentSerialized.add(String.valueOf(p.getInventory().getHeldItemSlot()));
             for (ItemStack item : p.getInventory().getContents()) {
                 currentSerialized.add(serializeItem(item));
             }
