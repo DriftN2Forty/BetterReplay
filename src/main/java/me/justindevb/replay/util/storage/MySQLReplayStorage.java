@@ -166,7 +166,7 @@ public class MySQLReplayStorage implements ReplayStorage {
     public CompletableFuture<File> getReplayFile(String name) {
         return CompletableFuture.supplyAsync(() -> {
             try (Connection conn = dataSource.getConnection();
-                 PreparedStatement ps = conn.prepareStatement("SELECT data FROM replays WHERE name=?")) {
+                PreparedStatement ps = conn.prepareStatement("SELECT data FROM replays WHERE name=?")) {
 
                 ps.setString(1, name);
                 try (ResultSet rs = ps.executeQuery()) {
