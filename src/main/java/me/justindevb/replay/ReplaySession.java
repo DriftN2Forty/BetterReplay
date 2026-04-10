@@ -814,17 +814,17 @@ public class ReplaySession implements Listener, PacketListener {
 
     private void giveReplayControls(Player viewer) {
 
-        ItemStack pauseButton = new ItemStack(Material.REDSTONE_BLOCK);
+        ItemStack pauseButton = new ItemStack(Material.RED_DYE);
         ItemMeta pauseMeta = pauseButton.getItemMeta();
         pauseMeta.setDisplayName("§cPause / Play");
         pauseButton.setItemMeta(pauseMeta);
 
-        ItemStack skipForward = new ItemStack(Material.LIME_CONCRETE);
+        ItemStack skipForward = new ItemStack(Material.LIME_DYE);
         ItemMeta forwardMeta = skipForward.getItemMeta();
         forwardMeta.setDisplayName("§a+5 seconds");
         skipForward.setItemMeta(forwardMeta);
 
-        ItemStack skipBackward = new ItemStack(Material.YELLOW_CONCRETE);
+        ItemStack skipBackward = new ItemStack(Material.YELLOW_DYE);
         ItemMeta backwardMeta = skipBackward.getItemMeta();
         backwardMeta.setDisplayName("§e-5 seconds");
         skipBackward.setItemMeta(backwardMeta);
@@ -875,6 +875,15 @@ public class ReplaySession implements Listener, PacketListener {
             return;
 
         String name = handItem.getItemMeta().getDisplayName();
+
+        // If the player is looking at a recorded player, open their inventory
+        // instead of activating the hotbar control. Works at extended range (20 blocks).
+        RecordedPlayer targetPlayer = getTargetedRecordedPlayer(player);
+        if (targetPlayer != null) {
+            targetPlayer.openInventoryForViewer(player);
+            e.setCancelled(true);
+            return;
+        }
 
         switch (name) {
             case "§cPause / Play" -> togglePause();
@@ -1182,7 +1191,6 @@ public class ReplaySession implements Listener, PacketListener {
 
         WrapperPlayClientInteractEntity wrapper = new WrapperPlayClientInteractEntity(event);
 
-
         if (trackedEntityIds.contains(wrapper.getEntityId()))
             event.setCancelled(true);
 
@@ -1197,6 +1205,45 @@ public class ReplaySession implements Listener, PacketListener {
             rp.openInventoryForViewer(viewer);
             event.setCancelled(true);
         }
+    }
+
+    /**
+     * Return the RecordedPlayer the viewer is aiming at, or null if none.
+     * Works up to 20 blocks away — much farther than Minecraft's native interaction range.
+     */
+    private RecordedPlayer getTargetedRecordedPlayer(Player player) {
+        Location eye = player.getEyeLocation();
+        org.bukkit.util.Vector dir = eye.getDirection().normalize();
+
+        RecordedPlayer closest = null;
+        double closestDist = Double.MAX_VALUE;
+
+        for (RecordedEntity re : recordedEntities.values()) {
+            if (!(re instanceof RecordedPlayer rp)) continue;
+
+            Location loc = re.getCurrentLocation();
+            if (loc == null || !eye.getWorld().equals(loc.getWorld()))
+                continue;
+
+            // Aim at entity center (approx 0.9 blocks above feet)
+            org.bukkit.util.Vector toEntity = loc.toVector()
+                    .add(new org.bukkit.util.Vector(0, 0.9, 0))
+                    .subtract(eye.toVector());
+
+            double distance = toEntity.length();
+            if (distance > 20.0) continue;
+
+            double dot = toEntity.dot(dir);
+            if (dot < 0) continue;
+
+            // Perpendicular distance squared from the look ray
+            double perpDistSq = toEntity.crossProduct(dir).lengthSquared();
+            if (perpDistSq < 2.25 && distance < closestDist) {
+                closest = rp;
+                closestDist = distance;
+            }
+        }
+        return closest;
     }
 
     public RecordedEntity getRecordedEntity(int entityId) {
