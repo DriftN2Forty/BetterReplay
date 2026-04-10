@@ -1,6 +1,4 @@
 package me.justindevb.replay.api.events;
-
-import me.justindevb.replay.RecordingSession;
 import me.justindevb.replay.ReplaySession;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;

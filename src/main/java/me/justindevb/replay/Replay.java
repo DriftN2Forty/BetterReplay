@@ -13,12 +13,9 @@ import me.justindevb.replay.util.storage.FileReplayStorage;
 import me.justindevb.replay.util.storage.MySQLConnectionManager;
 import me.justindevb.replay.util.storage.MySQLReplayStorage;
 import me.justindevb.replay.util.storage.ReplayStorage;
-import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.geysermc.floodgate.api.FloodgateApi;
 
 import java.util.logging.Level;
 
