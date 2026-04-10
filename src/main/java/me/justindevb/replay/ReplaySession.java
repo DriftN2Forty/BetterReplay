@@ -850,17 +850,15 @@ public class ReplaySession implements Listener, PacketListener {
 
 
     private Map<String, Object> getInventorySnapshotForPlayer(UUID uuid) {
-        if (timeline.isEmpty()) return null;
-        Map<String, Object> firstEvent = timeline.get(0);
+        String uuidStr = uuid.toString();
+        for (Map<String, Object> event : timeline) {
+            if (!"inventory_update".equals(event.get("type"))) continue;
+            if (!uuidStr.equals(event.get("uuid"))) continue;
 
-        if (!uuid.toString().equals(firstEvent.get("uuid")))
-            return null;
-
-        Object inventoryObj = firstEvent.get("inventory");
-        if (inventoryObj instanceof Map<?, ?> map) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> inventory = (Map<String, Object>) map;
-            return inventory;
+            // Return the event directly — inventory fields are at the top level
+            if (event.containsKey("mainHand") || event.containsKey("contents")) {
+                return event;
+            }
         }
         return null;
     }
@@ -931,6 +929,7 @@ public class ReplaySession implements Listener, PacketListener {
     private void syncEntityStatesAtIndex(int targetIndex) {
         Map<UUID, Map<String, Object>> firstEventByUUID = new LinkedHashMap<>();
         Map<UUID, Map<String, Object>> lastLocationByUUID = new LinkedHashMap<>();
+        Map<UUID, Map<String, Object>> lastInventoryByUUID = new LinkedHashMap<>();
         Set<UUID> shouldHaveQuitAtTarget = new HashSet<>();
         Set<UUID> shouldBeDeadAtTarget = new HashSet<>();
 
@@ -951,6 +950,7 @@ public class ReplaySession implements Listener, PacketListener {
 
             switch (type != null ? type : "") {
                 case "player_move", "entity_move" -> lastLocationByUUID.put(uuid, event);
+                case "inventory_update" -> lastInventoryByUUID.put(uuid, event);
                 case "player_quit" -> shouldHaveQuitAtTarget.add(uuid);
                 case "entity_death" -> shouldBeDeadAtTarget.add(uuid);
             }
@@ -1014,6 +1014,14 @@ public class ReplaySession implements Listener, PacketListener {
 
             entity.moveTo(new Location(world, x, y, z,
                     asFloat(event.get("yaw")), asFloat(event.get("pitch"))));
+        }
+
+        // Sync inventory state for all players to their last known snapshot.
+        for (Map.Entry<UUID, Map<String, Object>> entry : lastInventoryByUUID.entrySet()) {
+            RecordedEntity entity = recordedEntities.get(entry.getKey());
+            if (entity instanceof RecordedPlayer rp) {
+                rp.updateInventory(entry.getValue());
+            }
         }
     }
 

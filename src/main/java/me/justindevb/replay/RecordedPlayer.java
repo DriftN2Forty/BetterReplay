@@ -56,13 +56,11 @@ public class RecordedPlayer extends RecordedEntity {
 
     @Override
     public void spawn(Location location) {
-        SpawnFakePlayer fakePlayer = new SpawnFakePlayer(uuid, name, location, viewer, super.fakeEntityId);
+        SpawnFakePlayer fakePlayer = new SpawnFakePlayer(uuid, name, location, viewer, super.fakeEntityId, () -> {
+            this.spawned = true;
+            sendMetadata();
+        });
         this.fakeProfileUuid = fakePlayer.getFakeUuid();
-        this.spawned = true;
-
-        Replay.getInstance().getFoliaLib().getScheduler().runLater(this::sendMetadata, 1L);
-
-
     }
 
     private void sendMetadata() {
@@ -72,8 +70,12 @@ public class RecordedPlayer extends RecordedEntity {
         PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadata);
 
         if (currentInventory != null && !currentInventory.isEmpty()) {
-            if (spawned)
-                showInventorySnapshot(currentInventory);
+            // Reset last-known state so equipment packets are re-sent now that
+            // the client has had time to process the entity spawn.
+            lastMainHand = null;
+            lastOffHand = null;
+            Arrays.fill(lastArmor, new ItemStack(Material.AIR));
+            showInventorySnapshot(currentInventory);
         }
     }
 
@@ -115,13 +117,19 @@ public class RecordedPlayer extends RecordedEntity {
     }
 
     public void updateInventory(Map<String, Object> snapshot) {
-        this.currentInventory = snapshot;
+        if (snapshot.containsKey("mainHand"))
+            currentInventory.put("mainHand", snapshot.get("mainHand"));
+        if (snapshot.containsKey("offHand"))
+            currentInventory.put("offHand", snapshot.get("offHand"));
+        if (snapshot.containsKey("armor"))
+            currentInventory.put("armor", snapshot.get("armor"));
+        if (snapshot.containsKey("contents"))
+            currentInventory.put("contents", snapshot.get("contents"));
 
         if (!spawned)
             return;
 
         showInventorySnapshot(currentInventory);
-
     }
 
 
@@ -309,9 +317,6 @@ public class RecordedPlayer extends RecordedEntity {
             inv.setItem(37, deserializeItem(armor.get(1))); // leggings
             inv.setItem(36, deserializeItem(armor.get(0))); // boots
         }
-
-        inv.setItem(40, deserializeItem(currentInventory.get("offHand")));
-
 
         inv.setItem(40, deserializeItem(currentInventory.get("offHand")));
 
