@@ -1177,7 +1177,7 @@ public class ReplaySession implements Listener, PacketListener {
         if (!(e.getRightClicked() instanceof Player fake))
             return;
 
-        RecordedEntity recordedEntity = recordedEntities.get(fake.getEntityId());
+        RecordedEntity recordedEntity = recordedEntities.get(fake.getUniqueId());
         if (!(recordedEntity instanceof RecordedPlayer rp))
             return;
 
