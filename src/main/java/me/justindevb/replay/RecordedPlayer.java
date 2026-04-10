@@ -10,6 +10,7 @@ import com.github.retrooper.packetevents.wrapper.play.server.*;
 import com.github.retrooper.packetevents.util.Vector3i;
 import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import me.justindevb.replay.util.SpawnFakePlayer;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -65,8 +66,8 @@ public class RecordedPlayer extends RecordedEntity {
 
     private void sendMetadata() {
         if (!spawned) return;
-        EntityData data = new EntityData(0, EntityDataTypes.BYTE, metadataFlags);
-        WrapperPlayServerEntityMetadata metadata = new WrapperPlayServerEntityMetadata(fakeEntityId, Collections.singletonList(data));
+        EntityData<Byte> flagsData = new EntityData<>(0, EntityDataTypes.BYTE, metadataFlags);
+        WrapperPlayServerEntityMetadata metadata = new WrapperPlayServerEntityMetadata(fakeEntityId, Collections.singletonList(flagsData));
         PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadata);
 
         if (currentInventory != null && !currentInventory.isEmpty()) {
@@ -80,7 +81,7 @@ public class RecordedPlayer extends RecordedEntity {
     }
 
     public void setPose(Pose pose) {
-        EntityData poseData = new EntityData(6, EntityDataTypes.ENTITY_POSE, EntityPose.valueOf(pose.name()));
+        EntityData<EntityPose> poseData = new EntityData<>(6, EntityDataTypes.ENTITY_POSE, EntityPose.valueOf(pose.name()));
         WrapperPlayServerEntityMetadata metadata = new WrapperPlayServerEntityMetadata(
                 fakeEntityId,
                 Collections.singletonList(poseData)
@@ -148,8 +149,8 @@ public class RecordedPlayer extends RecordedEntity {
             metadataFlags &= ~0x02;
         }
 
-        EntityData flagsData = new EntityData(0, EntityDataTypes.BYTE, metadataFlags);
-        EntityData poseData = new EntityData(6, EntityDataTypes.ENTITY_POSE, sneaking ? EntityPose.CROUCHING : EntityPose.STANDING);
+        EntityData<Byte> flagsData = new EntityData<>(0, EntityDataTypes.BYTE, metadataFlags);
+        EntityData<EntityPose> poseData = new EntityData<>(6, EntityDataTypes.ENTITY_POSE, sneaking ? EntityPose.CROUCHING : EntityPose.STANDING);
 
         WrapperPlayServerEntityMetadata metadata = new WrapperPlayServerEntityMetadata(
                 fakeEntityId,
@@ -169,7 +170,7 @@ public class RecordedPlayer extends RecordedEntity {
             metadataFlags &= ~0x08;
         }
 
-        EntityData flagsData = new EntityData(0, EntityDataTypes.BYTE, metadataFlags);
+        EntityData<Byte> flagsData = new EntityData<>(0, EntityDataTypes.BYTE, metadataFlags);
         WrapperPlayServerEntityMetadata metadata =
                 new WrapperPlayServerEntityMetadata(fakeEntityId, Collections.singletonList(flagsData));
 
@@ -235,6 +236,7 @@ public class RecordedPlayer extends RecordedEntity {
                 EquipmentSlot.HELMET
         };
 
+        @SuppressWarnings("unchecked")
         List<String> rawArmorList = (List<String>) event.get("armor");
 
         if (rawArmorList != null) {
@@ -294,15 +296,16 @@ public class RecordedPlayer extends RecordedEntity {
         if (metaA == null && metaB == null) return true;
         if (metaA == null || metaB == null) return false;
 
-        if (!Objects.equals(metaA.getDisplayName(), metaB.getDisplayName())) return false;
-        if (!Objects.equals(metaA.getLore(), metaB.getLore())) return false;
+        if (!Objects.equals(metaA.displayName(), metaB.displayName())) return false;
+        if (!Objects.equals(metaA.lore(), metaB.lore())) return false;
 
         return true;
     }
 
     public void openInventoryForViewer(Player viewer) {
-        Inventory inv = Bukkit.createInventory(null, 45, name + "'s Inventory");
+        Inventory inv = Bukkit.createInventory(null, 45, Component.text(name + "'s Inventory"));
 
+        @SuppressWarnings("unchecked")
         List<String> contents = (List<String>) currentInventory.get("contents");
         if (contents != null) {
             for (int i = 0; i < contents.size() && i < 36; i++) {
@@ -310,6 +313,7 @@ public class RecordedPlayer extends RecordedEntity {
             }
         }
 
+        @SuppressWarnings("unchecked")
         List<String> armor = (List<String>) currentInventory.get("armor");
         if (armor != null && armor.size() == 4) {
             inv.setItem(39, deserializeItem(armor.get(3))); // helmet

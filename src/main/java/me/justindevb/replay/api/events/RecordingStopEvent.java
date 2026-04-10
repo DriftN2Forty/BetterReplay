@@ -1,12 +1,8 @@
 package me.justindevb.replay.api.events;
-
 import me.justindevb.replay.RecordingSession;
-import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.HandlerList;
 import org.jetbrains.annotations.NotNull;
-
-import java.util.List;
 
 public class RecordingStopEvent extends Event {
     private static final HandlerList HANDLERS = new HandlerList();

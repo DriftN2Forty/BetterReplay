@@ -17,8 +17,6 @@ public class PacketEventsListener implements PacketListener {
 
     @Override
     public void onPacketReceive(PacketReceiveEvent event) {
-        Player player = event.getPlayer();
-        RecorderManager manager = Replay.getInstance().getRecorderManager();
 
         if (!event.getPacketType().equals(PacketType.Play.Client.INTERACT_ENTITY))
             return;
