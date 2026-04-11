@@ -5,7 +5,12 @@ BetterReplay exposes a public API that other plugins can use to start/stop recor
 ## Table of Contents
 
 - [Getting the API Instance](#getting-the-api-instance)
-- [Maven Dependency](#maven-dependency)
+  - [Hard Dependency](#hard-dependency)
+  - [Soft Dependency](#soft-dependency)
+- [Build Tool Setup](#build-tool-setup)
+  - [Maven](#maven)
+  - [Gradle (Groovy DSL)](#gradle-groovy-dsl)
+  - [Gradle (Kotlin DSL)](#gradle-kotlin-dsl)
 - [ReplayManager Methods](#replaymanager-methods)
   - [startRecording](#startrecording)
   - [stopRecording](#stoprecording)
@@ -30,13 +35,15 @@ BetterReplay exposes a public API that other plugins can use to start/stop recor
 
 All API access starts through `ReplayAPI.get()`, which returns the `ReplayManager` instance. BetterReplay must be loaded before your plugin accesses the API.
 
-Add BetterReplay as a dependency in your `plugin.yml`:
+### Hard Dependency
+
+If your plugin **requires** BetterReplay to function, add it as a hard dependency in your `plugin.yml`:
 
 ```yaml
 depend: [BetterReplay]
 ```
 
-Then in your plugin code:
+Then access the API directly:
 
 ```java
 import me.justindevb.replay.api.ReplayAPI;
@@ -45,9 +52,54 @@ import me.justindevb.replay.api.ReplayManager;
 ReplayManager manager = ReplayAPI.get();
 ```
 
-## Maven Dependency
+### Soft Dependency
 
-To compile against the BetterReplay API, add the following to your `pom.xml`:
+If BetterReplay integration is optional, use `softdepend` instead:
+
+```yaml
+softdepend: [BetterReplay]
+```
+
+Then check for the plugin before accessing the API:
+
+```java
+import me.justindevb.replay.api.ReplayAPI;
+import me.justindevb.replay.api.ReplayManager;
+import org.bukkit.Bukkit;
+
+public class MyPlugin extends JavaPlugin {
+
+    private ReplayManager replayManager;
+
+    @Override
+    public void onEnable() {
+        if (Bukkit.getPluginManager().getPlugin("BetterReplay") != null) {
+            replayManager = ReplayAPI.get();
+            getLogger().info("BetterReplay integration enabled.");
+        } else {
+            getLogger().info("BetterReplay not found, replay features disabled.");
+        }
+    }
+
+    public boolean isReplayAvailable() {
+        return replayManager != null;
+    }
+
+    public ReplayManager getReplayManager() {
+        return replayManager;
+    }
+}
+```
+
+> **Tip:** Guard all BetterReplay API calls behind an `isReplayAvailable()` check to avoid `NoClassDefFoundError` if the plugin isn't installed.
+
+## Build Tool Setup
+
+> **Note:** BetterReplay is not currently published to Maven Central. You will need to build from source and install it to your local Maven repository (`mvn install`), or use a repository manager that hosts it.
+
+### Maven
+
+Add the following to your `pom.xml`:
 
 ```xml
 <dependency>
@@ -58,7 +110,21 @@ To compile against the BetterReplay API, add the following to your `pom.xml`:
 </dependency>
 ```
 
-> **Note:** BetterReplay is not currently published to Maven Central. You will need to build from source and install it to your local Maven repository with `mvn install`, or use a repository manager that hosts it.
+### Gradle (Groovy DSL)
+
+```groovy
+dependencies {
+    compileOnly 'me.justindevb:BetterReplay:1.4.0'
+}
+```
+
+### Gradle (Kotlin DSL)
+
+```kotlin
+dependencies {
+    compileOnly("me.justindevb:BetterReplay:1.4.0")
+}
+```
 
 ---
 
