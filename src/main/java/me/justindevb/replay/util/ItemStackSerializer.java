@@ -14,7 +14,7 @@ public final class ItemStackSerializer {
      * Serialize an ItemStack to a Base64 string using the modern Paper API.
      */
     public static String serializeItem(ItemStack item) {
-        if (item == null) return null;
+        if (item == null || item.isEmpty()) return null;
         return Base64.getEncoder().encodeToString(item.serializeAsBytes());
     }
 
