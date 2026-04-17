@@ -279,19 +279,11 @@ public class ReplaySession implements Listener, PacketListener {
             int targetIndex = findTimelineIndexAfterRecordedTick(recordedTick);
             seekToIndex(targetIndex);
         } else {
-            // Step backward: go to the start of the previous recorded tick group
+            // Step backward: go to the start of the currently displayed tick group
             if (currentIndex <= 0) return;
             int currentRecordedTick = getRecordedTickAtIndex(currentIndex - 1);
-            // Find start of current tick group
             int startOfCurrentGroup = findTimelineIndexAfterRecordedTick(currentRecordedTick - 1);
-            if (startOfCurrentGroup <= 0) {
-                seekToIndex(0);
-                return;
-            }
-            // Previous group's recorded tick
-            int prevRecordedTick = timeline.get(startOfCurrentGroup - 1).tick();
-            int targetIndex = findTimelineIndexAfterRecordedTick(prevRecordedTick - 1);
-            seekToIndex(targetIndex);
+            seekToIndex(startOfCurrentGroup);
         }
     }
 
@@ -318,6 +310,7 @@ public class ReplaySession implements Listener, PacketListener {
         Map<UUID, TimelineEvent> firstEventByUUID = new LinkedHashMap<>();
         Map<UUID, TimelineEvent> lastLocationByUUID = new LinkedHashMap<>();
         Map<UUID, TimelineEvent.InventoryUpdate> lastInventoryByUUID = new LinkedHashMap<>();
+        Map<UUID, TimelineEvent.HeldItemChange> lastHeldItemByUUID = new LinkedHashMap<>();
         Set<UUID> shouldHaveQuitAtTarget = new HashSet<>();
         Set<UUID> shouldBeDeadAtTarget = new HashSet<>();
 
@@ -339,6 +332,7 @@ public class ReplaySession implements Listener, PacketListener {
                 case TimelineEvent.PlayerMove ignored2 -> lastLocationByUUID.put(uuid, event);
                 case TimelineEvent.EntityMove ignored2 -> lastLocationByUUID.put(uuid, event);
                 case TimelineEvent.InventoryUpdate inv -> lastInventoryByUUID.put(uuid, inv);
+                case TimelineEvent.HeldItemChange hic -> lastHeldItemByUUID.put(uuid, hic);
                 case TimelineEvent.PlayerQuit ignored2 -> shouldHaveQuitAtTarget.add(uuid);
                 case TimelineEvent.EntityDeath ignored2 -> shouldBeDeadAtTarget.add(uuid);
                 default -> {}
@@ -392,6 +386,13 @@ public class ReplaySession implements Listener, PacketListener {
             RecordedEntity entity = recordedEntities.get(entry.getKey());
             if (entity instanceof RecordedPlayer rp) {
                 rp.updateInventory(entry.getValue());
+            }
+        }
+
+        for (Map.Entry<UUID, TimelineEvent.HeldItemChange> entry : lastHeldItemByUUID.entrySet()) {
+            RecordedEntity entity = recordedEntities.get(entry.getKey());
+            if (entity instanceof RecordedPlayer rp) {
+                rp.updateHeldItems(entry.getValue());
             }
         }
     }
