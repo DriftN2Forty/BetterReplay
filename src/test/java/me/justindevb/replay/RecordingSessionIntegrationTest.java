@@ -2,7 +2,6 @@ package me.justindevb.replay;
 
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.PacketEventsAPI;
-import com.github.retrooper.packetevents.manager.protocol.ProtocolManager;
 import com.github.retrooper.packetevents.event.EventManager;
 import me.justindevb.replay.recording.TimelineEvent;
 import me.justindevb.replay.storage.ReplayStorage;
@@ -28,6 +27,7 @@ import java.io.File;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -45,7 +45,6 @@ class RecordingSessionIntegrationTest {
     @Mock private ReplayCache replayCache;
 
     private UUID playerUuid;
-    private RecordingSession session;
 
     @BeforeEach
     void setUp() {
@@ -239,6 +238,7 @@ class RecordingSessionIntegrationTest {
             replayStatic.when(Replay::getInstance).thenReturn(plugin);
             when(plugin.getReplayStorage()).thenReturn(storage);
             when(plugin.getReplayCache()).thenReturn(replayCache);
+            when(plugin.getLogger()).thenReturn(Logger.getLogger("BetterReplay-Test"));
 
             PacketEventsAPI<?> api = mock(PacketEventsAPI.class);
             EventManager eventManager = mock(EventManager.class);

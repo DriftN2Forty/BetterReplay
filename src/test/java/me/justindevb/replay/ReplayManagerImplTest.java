@@ -1,19 +1,14 @@
 package me.justindevb.replay;
 
-import me.justindevb.replay.api.ReplayManager;
 import me.justindevb.replay.storage.ReplayStorage;
 import me.justindevb.replay.util.ReplayCache;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.PluginManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.io.File;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -126,16 +121,12 @@ class ReplayManagerImplTest {
 
     @Test
     void deleteSavedReplay_existing_deletesAndRefreshesCache() {
-        try (MockedStatic<Replay> replayStatic = mockStatic(Replay.class)) {
-            replayStatic.when(Replay::getInstance).thenReturn(plugin);
+        when(storage.deleteReplay("test")).thenReturn(CompletableFuture.completedFuture(true));
+        when(storage.listReplays()).thenReturn(CompletableFuture.completedFuture(List.of()));
 
-            when(storage.deleteReplay("test")).thenReturn(CompletableFuture.completedFuture(true));
-            when(storage.listReplays()).thenReturn(CompletableFuture.completedFuture(List.of()));
-
-            boolean result = manager.deleteSavedReplay("test").join();
-            assertTrue(result);
-            verify(replayCache).setReplays(List.of());
-        }
+        boolean result = manager.deleteSavedReplay("test").join();
+        assertTrue(result);
+        verify(replayCache).setReplays(List.of());
     }
 
     @Test

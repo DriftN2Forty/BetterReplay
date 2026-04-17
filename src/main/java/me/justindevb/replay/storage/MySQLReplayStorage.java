@@ -52,8 +52,7 @@ public class MySQLReplayStorage implements ReplayStorage {
                 """);
 
             } catch (SQLException e) {
-                replay.getLogger().severe("Failed to init replay table");
-                e.printStackTrace();
+                replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to init replay table", e);
             }
         });
     }
@@ -69,7 +68,7 @@ public class MySQLReplayStorage implements ReplayStorage {
                  ON DUPLICATE KEY UPDATE data = VALUES(data)
              """)) {
 
-                String json = VersionUtil.wrapTimeline(gson, timeline, replay.getDescription().getVersion());
+                String json = VersionUtil.wrapTimeline(gson, timeline, replay.getPluginMeta().getVersion());
                 byte[] data = isCompressionEnabled()
                         ? ReplayCompressor.compress(json)
                         : json.getBytes(StandardCharsets.UTF_8);
@@ -99,7 +98,7 @@ public class MySQLReplayStorage implements ReplayStorage {
                     if (!rs.next()) return null;
                     // Auto-detect compression so legacy uncompressed rows still load
                     String json = ReplayCompressor.decompressIfNeeded(rs.getBytes("data"));
-                    return VersionUtil.parseReplayJson(gson, json, replay.getDescription().getVersion(), TIMELINE_LIST_TYPE);
+                    return VersionUtil.parseReplayJson(gson, json, replay.getPluginMeta().getVersion(), TIMELINE_LIST_TYPE);
                 }
 
             } catch (Exception e) {
@@ -124,7 +123,7 @@ public class MySQLReplayStorage implements ReplayStorage {
                 }
 
             } catch (SQLException e) {
-                e.printStackTrace();
+                replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to check replay existence: " + name, e);
                 return false;
             }
         });
@@ -184,7 +183,7 @@ public class MySQLReplayStorage implements ReplayStorage {
 
                     // Auto-detect compression; works for both compressed and plain rows
                     String json = ReplayCompressor.decompressIfNeeded(rs.getBytes("data"));
-                    List<TimelineEvent> timeline = VersionUtil.parseReplayJson(gson, json, replay.getDescription().getVersion(), TIMELINE_LIST_TYPE);
+                    List<TimelineEvent> timeline = VersionUtil.parseReplayJson(gson, json, replay.getPluginMeta().getVersion(), TIMELINE_LIST_TYPE);
 
                     File tempFile = File.createTempFile("replay_" + name + "_", ".json");
                     tempFile.deleteOnExit();
@@ -194,7 +193,7 @@ public class MySQLReplayStorage implements ReplayStorage {
                     return tempFile;
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to get replay file: " + name, e);
                 return null;
             }
         });

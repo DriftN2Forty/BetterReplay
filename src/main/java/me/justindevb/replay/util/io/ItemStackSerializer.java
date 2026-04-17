@@ -45,7 +45,7 @@ public final class ItemStackSerializer {
             Object read = dataInput.readObject();
             return read instanceof ItemStack item ? item : null;
         } catch (IOException | ClassNotFoundException e) {
-            e.printStackTrace();
+            java.util.logging.Logger.getLogger("BetterReplay").log(java.util.logging.Level.SEVERE, "Failed to deserialize legacy ItemStack", e);
             return null;
         }
     }

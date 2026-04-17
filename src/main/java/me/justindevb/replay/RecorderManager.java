@@ -1,6 +1,5 @@
 package me.justindevb.replay;
 
-import com.tcoded.folialib.FoliaLib;
 import com.tcoded.folialib.wrapper.task.WrappedTask;
 import me.justindevb.replay.api.events.RecordingStartEvent;
 import me.justindevb.replay.api.events.RecordingStopEvent;
@@ -85,7 +84,7 @@ public class RecorderManager {
                     });
                 })
                 .exceptionally(ex -> {
-                    ex.printStackTrace();
+                    replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to load replay: " + name, ex);
                     viewer.sendMessage("§cFailed to load replay: " + name);
                     return null;
                 });
