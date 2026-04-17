@@ -1,6 +1,5 @@
 package me.justindevb.replay;
 
-import com.tcoded.folialib.FoliaLib;
 import com.tcoded.folialib.wrapper.task.WrappedTask;
 import me.justindevb.replay.api.events.RecordingStartEvent;
 import me.justindevb.replay.api.events.RecordingStopEvent;
