@@ -42,7 +42,7 @@ public class ReplayManagerImpl implements ReplayManager {
             storage.listReplays().thenAccept(names ->
                     replay.getReplayCache().setReplays(names)
             ).exceptionally(ex -> {
-                ex.printStackTrace();
+                replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to refresh replay cache", ex);
                 return null;
             });
         }
@@ -93,7 +93,7 @@ public class ReplayManagerImpl implements ReplayManager {
                                 + mismatch.getRequiredVersion() + "+. You are running v"
                                 + mismatch.getRunningVersion() + "."));
                     } else {
-                        ex.printStackTrace();
+                        replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to start replay: " + replayName, ex);
                         runSync(() -> viewer.sendMessage("§cFailed to start replay: " + replayName));
                     }
                     return Optional.empty();
@@ -149,7 +149,7 @@ public class ReplayManagerImpl implements ReplayManager {
                             return deleted;
                         }))
                 .exceptionally(ex -> {
-                    ex.printStackTrace();
+                    replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to delete replay: " + name, ex);
                     return false;
                 });
     }
@@ -169,7 +169,7 @@ public class ReplayManagerImpl implements ReplayManager {
                     return Optional.of(file);
                 })
                 .exceptionally(ex -> {
-                    ex.printStackTrace();
+                    replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to get replay file: " + name, ex);
                     return Optional.empty();
                 });
     }

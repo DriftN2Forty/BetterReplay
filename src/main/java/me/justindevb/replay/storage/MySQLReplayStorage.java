@@ -52,8 +52,7 @@ public class MySQLReplayStorage implements ReplayStorage {
                 """);
 
             } catch (SQLException e) {
-                replay.getLogger().severe("Failed to init replay table");
-                e.printStackTrace();
+                replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to init replay table", e);
             }
         });
     }
@@ -124,7 +123,7 @@ public class MySQLReplayStorage implements ReplayStorage {
                 }
 
             } catch (SQLException e) {
-                e.printStackTrace();
+                replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to check replay existence: " + name, e);
                 return false;
             }
         });
@@ -194,7 +193,7 @@ public class MySQLReplayStorage implements ReplayStorage {
                     return tempFile;
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to get replay file: " + name, e);
                 return null;
             }
         });

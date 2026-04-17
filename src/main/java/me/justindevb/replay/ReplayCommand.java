@@ -180,8 +180,7 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
                             p.sendMessage(navigation);
                         }))
                         .exceptionally(ex -> {
-                            Replay.getInstance().getLogger().log(Level.INFO, "Failed to print list");
-                            ex.printStackTrace();
+                            Replay.getInstance().getLogger().log(Level.SEVERE, "Failed to print list", ex);
                             return null;
                         });
 
@@ -209,7 +208,7 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
                             });
                         })
                         .exceptionally(ex -> {
-                            ex.printStackTrace();
+                            Replay.getInstance().getLogger().log(Level.SEVERE, "Failed to delete replay: " + name, ex);
                             Replay.getInstance().getFoliaLib().getScheduler().runNextTick(task ->
                                     p.sendMessage("§cFailed to delete replay: " + name));
                             return null;

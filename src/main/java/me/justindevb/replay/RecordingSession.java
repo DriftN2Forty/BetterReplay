@@ -168,7 +168,7 @@ public class RecordingSession {
                     replay.getLogger().info("Recording " + name + " saved!");
                 })
                 .exceptionally(ex -> {
-                    ex.printStackTrace();
+                    replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to save recording: " + name, ex);
                     return null;
                 });
     }

@@ -85,7 +85,7 @@ public class RecorderManager {
                     });
                 })
                 .exceptionally(ex -> {
-                    ex.printStackTrace();
+                    replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to load replay: " + name, ex);
                     viewer.sendMessage("§cFailed to load replay: " + name);
                     return null;
                 });
