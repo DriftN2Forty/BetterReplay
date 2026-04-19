@@ -47,6 +47,10 @@ public class ReplaySession implements Listener, PacketListener {
     private int tick = 0;
     private boolean paused = false;
     private boolean stopped = false;
+    private double playbackSpeed;
+    private final double speedStep;
+    private final double maxSpeed;
+    private double accumulatedTicks = 0.0;
 
     // Delegates
     private final ReplayBlockManager blockManager;
@@ -58,6 +62,10 @@ public class ReplaySession implements Listener, PacketListener {
         this.viewer = viewer;
         this.replay = replay;
 
+        this.speedStep = replay.getConfig().getDouble("Playback.Speed-Step", 0.2);
+        this.maxSpeed = replay.getConfig().getDouble("Playback.Max-Speed", 1.0);
+        this.playbackSpeed = maxSpeed;
+
         this.blockManager = new ReplayBlockManager(viewer, replay);
         this.playbackEngine = new PlaybackEngine(viewer, replay, trackedEntityIds, deadEntities, recordedEntities, blockManager);
         this.inventoryUI = new ReplayInventoryUI(viewer, () -> recordedEntities, new ReplayInventoryUI.SessionControl() {
@@ -66,11 +74,12 @@ public class ReplaySession implements Listener, PacketListener {
                 if (paused) {
                     inventoryUI.showStepControls();
                 } else {
-                    inventoryUI.hideStepControls();
+                    inventoryUI.showSpeedControls(playbackSpeed);
                 }
             }
             @Override public void skipSeconds(int seconds) { ReplaySession.this.skipSeconds(seconds); }
             @Override public void stepTick(int direction) { ReplaySession.this.stepTick(direction); }
+            @Override public void changeSpeed(int direction) { ReplaySession.this.changeSpeed(direction); }
             @Override public void stop() { ReplaySession.this.stop(); }
             @Override public boolean isActive() { return ReplaySession.this.isActive(); }
         });
@@ -113,6 +122,7 @@ public class ReplaySession implements Listener, PacketListener {
         }
 
         inventoryUI.giveReplayControls();
+        inventoryUI.showSpeedControls(playbackSpeed);
         blockManager.primeInitialBrokenBlockStates(timeline);
 
         Bukkit.getPluginManager().callEvent(new ReplayStartEvent(viewer, this));
@@ -137,8 +147,13 @@ public class ReplaySession implements Listener, PacketListener {
                 return;
             }
 
-            TimelineEvent firstEvent = timeline.get(tick);
-            int recordedTick = firstEvent.tick();
+            accumulatedTicks += playbackSpeed;
+            int tickGroupsToProcess = (int) accumulatedTicks;
+            accumulatedTicks -= tickGroupsToProcess;
+
+            for (int g = 0; g < tickGroupsToProcess && tick < timeline.size(); g++) {
+                TimelineEvent firstEvent = timeline.get(tick);
+                int recordedTick = firstEvent.tick();
 
             while (tick < timeline.size()) {
                 TimelineEvent event = timeline.get(tick);
@@ -217,6 +232,7 @@ public class ReplaySession implements Listener, PacketListener {
                 playbackEngine.handleEvent(recorded, event);
                 tick++;
             }
+            }
             sendActionBar();
         }, 1L, 1L);
     }
@@ -248,6 +264,20 @@ public class ReplaySession implements Listener, PacketListener {
             HandlerList.unregisterAll(this);
             HandlerList.unregisterAll(inventoryUI);
         }
+    }
+
+    // -- Speed --
+
+    private void changeSpeed(int direction) {
+        double newSpeed = playbackSpeed + (direction * speedStep);
+        // Round to avoid floating point drift
+        newSpeed = Math.round(newSpeed * 100.0) / 100.0;
+        if (newSpeed < speedStep) newSpeed = speedStep;
+        if (newSpeed > maxSpeed) newSpeed = maxSpeed;
+        playbackSpeed = newSpeed;
+        accumulatedTicks = 0.0;
+        inventoryUI.showSpeedControls(playbackSpeed);
+        sendActionBar();
     }
 
     // -- Skip / Seek --
@@ -490,9 +520,11 @@ public class ReplaySession implements Listener, PacketListener {
             bar = Component.text("\u23F8 Replay paused: ", NamedTextColor.YELLOW)
                     .append(Component.text(current + " / " + total, NamedTextColor.GRAY));
         } else {
+            String speedText = String.format("%.1fx", playbackSpeed);
             bar = Component.text("\u25B6 Replay: ", NamedTextColor.GREEN)
                     .append(Component.text(current + " / " + total, NamedTextColor.GRAY))
-                    .append(Component.text(" (" + percent + "%)", NamedTextColor.DARK_GRAY));
+                    .append(Component.text(" (" + percent + "%)", NamedTextColor.DARK_GRAY))
+                    .append(Component.text(" [" + speedText + "]", NamedTextColor.AQUA));
         }
         viewer.sendActionBar(bar);
     }

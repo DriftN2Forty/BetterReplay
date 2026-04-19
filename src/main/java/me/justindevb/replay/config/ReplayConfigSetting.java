@@ -22,7 +22,11 @@ public enum ReplayConfigSetting {
     MYSQL_PASSWORD("General.MySQL.password", "password",
             "MySQL password."),
     LIST_PAGE_SIZE("list-page-size", 10,
-            "Number of replay names shown per /replay list page.");
+            "Number of replay names shown per /replay list page."),
+    PLAYBACK_SPEED_STEP("Playback.Speed-Step", 0.2,
+            "Speed change increment per Faster/Slower click (e.g. 0.2 = 20%)."),
+    PLAYBACK_MAX_SPEED("Playback.Max-Speed", 1.0,
+            "Maximum playback speed multiplier.");
 
     private final String key;
     private final Object defaultValue;
@@ -56,5 +60,9 @@ public enum ReplayConfigSetting {
 
     public int getInt(FileConfiguration config) {
         return config.getInt(this.key, (int) this.defaultValue);
+    }
+
+    public double getDouble(FileConfiguration config) {
+        return config.getDouble(this.key, ((Number) this.defaultValue).doubleValue());
     }
 }
