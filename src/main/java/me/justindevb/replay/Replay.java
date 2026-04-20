@@ -6,6 +6,8 @@ import com.tcoded.folialib.FoliaLib;
 import org.bstats.bukkit.Metrics;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import me.justindevb.replay.api.ReplayAPI;
+import me.justindevb.replay.config.ReplayConfigManager;
+import me.justindevb.replay.config.ReplayConfigSetting;
 import me.justindevb.replay.listeners.PacketEventsListener;
 import me.justindevb.replay.util.ReplayCache;
 import me.justindevb.replay.util.UpdateChecker;
@@ -99,21 +101,11 @@ public class Replay extends JavaPlugin {
     }
 
     private void initConfig() {
-        initGeneralConfigSettings();
-
-        getConfig().options().copyDefaults(true);
-        saveConfig();
-    }
-
-    private void initGeneralConfigSettings() {
-        FileConfiguration config = getConfig();
-        for (ConfigSetting setting : ConfigSetting.values()) {
-            setting.applyDefault(config);
-        }
+        new ReplayConfigManager(this).initialize();
     }
 
     private void checkForUpdate() {
-        if (!ConfigSetting.CHECK_UPDATE.getBoolean(getConfig()))
+        if (!ReplayConfigSetting.CHECK_UPDATE.getBoolean(getConfig()))
             return;
 
         String currentVersion = getPluginMeta().getVersion();
@@ -130,13 +122,13 @@ public class Replay extends JavaPlugin {
 
     private void initStorage() {
         FileConfiguration config = getConfig();
-        String storageType = ConfigSetting.STORAGE_TYPE.getString(config).toLowerCase(Locale.ROOT);
+        String storageType = ReplayConfigSetting.STORAGE_TYPE.getString(config).toLowerCase(Locale.ROOT);
         if (storageType.contentEquals("mysql")) {
-            String host = ConfigSetting.MYSQL_HOST.getString(config);
-            int port = ConfigSetting.MYSQL_PORT.getInt(config);
-            String database = ConfigSetting.MYSQL_DATABASE.getString(config);
-            String user = ConfigSetting.MYSQL_USER.getString(config);
-            String password = ConfigSetting.MYSQL_PASSWORD.getString(config);
+            String host = ReplayConfigSetting.MYSQL_HOST.getString(config);
+            int port = ReplayConfigSetting.MYSQL_PORT.getInt(config);
+            String database = ReplayConfigSetting.MYSQL_DATABASE.getString(config);
+            String user = ReplayConfigSetting.MYSQL_USER.getString(config);
+            String password = ReplayConfigSetting.MYSQL_PASSWORD.getString(config);
 
             connectionManager = new MySQLConnectionManager(host, port, database, user, password);
 
@@ -169,45 +161,5 @@ public class Replay extends JavaPlugin {
 
     public FoliaLib getFoliaLib() {
         return foliaLib;
-    }
-
-    public enum ConfigSetting {
-        CHECK_UPDATE("General.Check-Update", true),
-        COMPRESS_REPLAYS("General.Compress-Replays", true),
-        STORAGE_TYPE("General.Storage-Type", "file"),
-        MYSQL_HOST("General.MySQL.host", "host"),
-        MYSQL_PORT("General.MySQL.port", 3306),
-        MYSQL_DATABASE("General.MySQL.database", "database"),
-        MYSQL_USER("General.MySQL.user", "username"),
-        MYSQL_PASSWORD("General.MySQL.password", "password"),
-        LIST_PAGE_SIZE("list-page-size", 10);
-
-        private final String key;
-        private final Object defaultValue;
-
-        ConfigSetting(String key, Object defaultValue) {
-            this.key = key;
-            this.defaultValue = defaultValue;
-        }
-
-        public void applyDefault(FileConfiguration config) {
-            config.addDefault(this.key, this.defaultValue);
-        }
-
-        public String getString(FileConfiguration config) {
-            return config.getString(this.key, (String) this.defaultValue);
-        }
-
-        public boolean getBoolean(FileConfiguration config) {
-            return config.getBoolean(this.key, (boolean) this.defaultValue);
-        }
-
-        public int getInt(FileConfiguration config) {
-            return config.getInt(this.key, (int) this.defaultValue);
-        }
-
-        public String getKey() {
-            return key;
-        }
     }
 }
