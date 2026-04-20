@@ -47,10 +47,13 @@ class ReplayConfigManagerTest {
         new ReplayConfigManager(plugin).initialize();
 
         String migrated = Files.readString(configFile, StandardCharsets.UTF_8);
+        assertTrue(migrated.startsWith("# ==========================================="));
         assertTrue(migrated.contains("# Internal config migration version. Do not edit unless instructed."));
         assertTrue(migrated.contains("Config-Version: 2"));
         assertTrue(migrated.contains("# Check for plugin updates on startup."));
         assertTrue(migrated.contains("# Number of replay names shown per /replay list page."));
+        assertTrue(migrated.indexOf("# MySQL host name or IP address.") < migrated.indexOf("host:"));
+        assertTrue(migrated.indexOf("# Check for plugin updates on startup.") < migrated.indexOf("Check-Update:"));
 
         verify(plugin).reloadConfig();
     }
