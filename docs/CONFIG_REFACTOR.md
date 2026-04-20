@@ -136,3 +136,107 @@ With the resource file providing first-run defaults and all read sites carrying 
 | `FileReplayStorage.java` | *(already uses fallback — no change needed)* |
 | `MySQLReplayStorage.java` | *(already uses fallback — no change needed)* |
 | `ReplayCommand.java` | *(already uses fallback — no change needed)* |
+
+---
+
+## Alternative: CommentedFileConfiguration Library (Best of Both Worlds)
+
+Source: [NikV2/AnticheatBase](https://github.com/NikV2/AnticheatBase/tree/master/src/main/java/me/nik/anticheatbase/files/commentedfiles)
+
+This approach preserves YAML comments while still allowing programmatic default management — combining the best aspects of both approaches above.
+
+### How it works
+
+The library consists of three classes:
+
+1. **`CommentedConfigurationSection`** — Wraps Bukkit's `ConfigurationSection` with a delegate pattern. All standard `getBoolean()`, `getString()`, etc. calls are forwarded to the underlying Bukkit config. This means all existing config read code works unchanged.
+
+2. **`CommentedFileConfigurationHelper`** — The comment preservation engine. On **read**, it converts YAML comments (`# text`) into fake key-value pairs (`PluginName_COMMENT_0: 'text'`). On **write**, it reverses the transformation back to `# text` with proper indentation and spacing. This round-trips comments through SnakeYAML without losing them.
+
+3. **`CommentedFileConfiguration`** — Extends `CommentedConfigurationSection`, adds `set(path, value, comments...)` (set a value with attached comments) and `addComments(comments...)` (standalone comment block). Handles loading, saving, and reloading.
+
+### The comment trick
+
+```
+# This is a comment about storage type     ← original file
+Storage-Type: file
+
+↓ on read, transformed to:
+
+BetterReplay_COMMENT_0: ' This is a comment about storage type'   ← fake YAML key
+Storage-Type: file
+
+↓ SnakeYAML serializes normally (it sees keys, not comments)
+
+↓ on write, transformed back to:
+
+# This is a comment about storage type     ← restored comment
+Storage-Type: file
+```
+
+### Config enum pattern
+
+The AnticheatBase library pairs this with a `Setting` enum that centralizes all config keys, defaults, and comments in one place:
+
+```java
+public enum Setting {
+    CHECK_UPDATE("General.Check-Update", true,
+            "Check for plugin updates on startup"),
+    COMPRESS_REPLAYS("General.Compress-Replays", true,
+            "GZIP compress replay data files to save disk space"),
+    STORAGE_TYPE("General.Storage-Type", "file",
+            "Storage backend: \"file\" or \"mysql\""),
+    MYSQL_HOST("General.MySQL.host", "localhost"),
+    MYSQL_PORT("General.MySQL.port", 3306),
+    // ...
+    SPEED_STEP("Playback.Speed-Step", 0.2,
+            "Amount to change playback speed per click (0.2 = 20% steps)"),
+    MAX_SPEED("Playback.Max-Speed", 1.0,
+            "Maximum playback speed multiplier (1.0 = real-time)");
+
+    private final String key;
+    private final Object defaultValue;
+    private final String[] comments;
+    private Object cachedValue;
+
+    // getBoolean(), getInt(), getDouble(), getString() typed accessors
+    // setIfNotExists(config) — writes default + comments if key is missing
+    // loadValue() — lazy-loads and caches from config
+    // reset() — clears cache (for reload support)
+}
+```
+
+**Usage at read sites becomes:**
+```java
+// Before — scattered magic strings
+getConfig().getBoolean("General.Check-Update")
+
+// After — compile-time safe, self-documenting
+Setting.CHECK_UPDATE.getBoolean()
+```
+
+### What this gives us over the static resource approach
+
+| Capability | Static `config.yml` resource | CommentedFileConfiguration |
+|------------|------------------------------|---------------------------|
+| Comments preserved on first install | Yes | Yes |
+| Comments preserved after update adds new keys | No — new keys use silent fallbacks, no comments appear | **Yes — new keys written with their comments** |
+| Comments survive user edits + plugin save | Depends on whether plugin ever calls `saveConfig()` | **Yes — comments round-trip through saves** |
+| Compile-time config key safety | No — still bare strings | **Yes — enum constants** |
+| Cached values (avoid repeated YAML parsing) | No | **Yes — lazy load + cache** |
+| Reload support | Requires re-reading file | **Built-in `reloadConfig()` + `reset()`** |
+| Config migration on updates | Manual | **Automatic — `setIfNotExists()` in enum loop** |
+
+### Trade-offs
+
+- **Three extra classes to maintain.** The library is ~450 lines of code across the three files. It uses reflection to access SnakeYAML's `DumperOptions` for formatting control, which could break with major Bukkit API changes (though it already handles the 1.18.1+ field name change).
+- **Comment encoding is a workaround, not a standard mechanism.** It works reliably but future SnakeYAML versions with native comment support could make this unnecessary.
+- **Slight complexity increase.** The `Setting` enum pattern adds indirection but pays for itself in safety and maintainability as the config grows.
+
+### Implementation for BetterReplay
+
+1. Copy the three `commentedfiles` classes into `me.justindevb.replay.config` (or similar package), adjusting the package declaration
+2. Create a `Setting` enum with all current and future config keys, defaults, and comment strings
+3. Replace `initConfig()` with a loop over `Setting.values()` calling `setIfNotExists(config)` then `config.save()`
+4. Replace all `getConfig().getXxx("key")` calls with `Setting.KEY.getXxx()`
+5. Existing config files are migrated automatically — missing keys get added with comments, existing keys and any user comments are preserved
