@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Minimal comment-preserving YAML wrapper for Bukkit configs.
@@ -62,23 +63,55 @@ public class CommentedFileConfiguration {
             return false;
         }
 
-        String prefix = "";
-        int split = setting.getKey().lastIndexOf('.');
-        if (split != -1) {
-            prefix = setting.getKey().substring(0, split + 1);
-        }
-
-        for (String comment : setting.getComments()) {
-            yaml.set(prefix + plugin.getName() + COMMENT_MARKER + commentIndex++, " " + comment);
-        }
+        ensureSettingComments(setting);
         yaml.set(setting.getKey(), setting.getDefaultValue());
         return true;
     }
 
+    public boolean ensureSettingComments(ReplayConfigSetting setting) {
+        String prefix = settingPrefix(setting.getKey());
+        boolean changed = false;
+
+        for (String comment : setting.getComments()) {
+            if (hasComment(prefix, comment)) {
+                continue;
+            }
+            yaml.set(prefix + markerPrefix() + commentIndex++, " " + comment);
+            changed = true;
+        }
+
+        return changed;
+    }
+
     public void addHeaderComments(String... comments) {
         for (String comment : comments) {
-            yaml.set(plugin.getName() + COMMENT_MARKER + commentIndex++, " " + comment);
+            yaml.set(markerPrefix() + commentIndex++, " " + comment);
         }
+    }
+
+    public boolean addHeaderCommentsIfMissing(String... comments) {
+        boolean changed = false;
+        for (String comment : comments) {
+            if (hasComment("", comment)) {
+                continue;
+            }
+            yaml.set(markerPrefix() + commentIndex++, " " + comment);
+            changed = true;
+        }
+        return changed;
+    }
+
+    public int getInt(String path, int defaultValue) {
+        return yaml.getInt(path, defaultValue);
+    }
+
+    public boolean setIfDifferent(String path, Object value) {
+        Object current = yaml.get(path);
+        if (Objects.equals(current, value)) {
+            return false;
+        }
+        yaml.set(path, value);
+        return true;
     }
 
     public void save() {
@@ -167,5 +200,29 @@ public class CommentedFileConfiguration {
         }
 
         return String.join(System.lineSeparator(), restored);
+    }
+
+    private String settingPrefix(String key) {
+        int split = key.lastIndexOf('.');
+        return split == -1 ? "" : key.substring(0, split + 1);
+    }
+
+    private String markerPrefix() {
+        return plugin.getName() + COMMENT_MARKER;
+    }
+
+    private boolean hasComment(String prefix, String comment) {
+        String keyPrefix = prefix + markerPrefix();
+        String expectedValue = " " + comment;
+        for (String key : yaml.getKeys(true)) {
+            if (!key.startsWith(keyPrefix)) {
+                continue;
+            }
+            Object value = yaml.get(key);
+            if (expectedValue.equals(value)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

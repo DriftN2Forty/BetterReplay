@@ -3,6 +3,8 @@ package me.justindevb.replay.config;
 import org.bukkit.configuration.file.FileConfiguration;
 
 public enum ReplayConfigSetting {
+        CONFIG_VERSION("Config-Version", 2,
+                        "Internal config migration version. Do not edit unless instructed."),
     CHECK_UPDATE("General.Check-Update", true,
             "Check for plugin updates on startup."),
     COMPRESS_REPLAYS("General.Compress-Replays", true,
