@@ -137,7 +137,7 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
                                 return;
                             }
 
-                            int perPage = Replay.getInstance().getConfig().getInt("list-page-size", 10);
+                            int perPage = Replay.ConfigSetting.LIST_PAGE_SIZE.getInt(Replay.getInstance().getConfig());
                             int totalPages = (int) Math.ceil((double) replays.size() / perPage);
 
                             if (page > totalPages) {

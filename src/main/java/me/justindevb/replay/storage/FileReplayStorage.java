@@ -38,7 +38,7 @@ public class FileReplayStorage implements ReplayStorage {
 
     /** Returns true when the plugin config has compression enabled (default: true). */
     private boolean isCompressionEnabled() {
-        return replay.getConfig().getBoolean("General.Compress-Replays", true);
+        return Replay.ConfigSetting.COMPRESS_REPLAYS.getBoolean(replay.getConfig());
     }
 
     /**

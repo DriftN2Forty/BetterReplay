@@ -17,6 +17,7 @@ import org.bukkit.command.PluginCommand;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.Locale;
 import java.util.logging.Level;
 
 public class Replay extends JavaPlugin {
@@ -106,18 +107,13 @@ public class Replay extends JavaPlugin {
 
     private void initGeneralConfigSettings() {
         FileConfiguration config = getConfig();
-        config.addDefault("General.Check-Update", true);
-        config.addDefault("General.Compress-Replays", true);  // GZIP compress replay data
-        config.addDefault("General.Storage-Type", "file");  // Valid options: "file","mysql"
-        config.addDefault("General.MySQL.host", "host");
-        config.addDefault("General.MySQL.port", 3306);
-        config.addDefault("General.MySQL.database", "database");
-        config.addDefault("General.MySQL.user", "username");
-        config.addDefault("General.MySQL.password", "password");
+        for (ConfigSetting setting : ConfigSetting.values()) {
+            setting.applyDefault(config);
+        }
     }
 
     private void checkForUpdate() {
-        if (!getConfig().getBoolean("General.Check-Update"))
+        if (!ConfigSetting.CHECK_UPDATE.getBoolean(getConfig()))
             return;
 
         String currentVersion = getPluginMeta().getVersion();
@@ -134,20 +130,21 @@ public class Replay extends JavaPlugin {
 
     private void initStorage() {
         FileConfiguration config = getConfig();
-        if (getConfig().getString("General.Storage-Type").contentEquals("mysql")) {
-            String host = config.getString("General.MySQL.host");
-            int port = config.getInt("General.MySQL.port");
-            String database = config.getString("General.MySQL.database");
-            String user = config.getString("General.MySQL.user");
-            String password = config.getString("General.MySQL.password");
+        String storageType = ConfigSetting.STORAGE_TYPE.getString(config).toLowerCase(Locale.ROOT);
+        if (storageType.contentEquals("mysql")) {
+            String host = ConfigSetting.MYSQL_HOST.getString(config);
+            int port = ConfigSetting.MYSQL_PORT.getInt(config);
+            String database = ConfigSetting.MYSQL_DATABASE.getString(config);
+            String user = ConfigSetting.MYSQL_USER.getString(config);
+            String password = ConfigSetting.MYSQL_PASSWORD.getString(config);
 
             connectionManager = new MySQLConnectionManager(host, port, database, user, password);
 
             storage = new MySQLReplayStorage(connectionManager.getDataSource(), this);
-        } else if (getConfig().getString("General.Storage-Type").contentEquals("file")) {
+        } else if (storageType.contentEquals("file")) {
             storage = new FileReplayStorage(this);
         } else {
-            getLogger().log(Level.SEVERE, "Invalid storage selected: " + getConfig().getString("General.Storage-Type"));
+            getLogger().log(Level.SEVERE, "Invalid storage selected: " + storageType);
             getLogger().log(Level.SEVERE, "Valid types: file, mysql");
             getLogger().log(Level.SEVERE, "Defaulting to file");
             storage = new FileReplayStorage(this);
@@ -172,5 +169,45 @@ public class Replay extends JavaPlugin {
 
     public FoliaLib getFoliaLib() {
         return foliaLib;
+    }
+
+    public enum ConfigSetting {
+        CHECK_UPDATE("General.Check-Update", true),
+        COMPRESS_REPLAYS("General.Compress-Replays", true),
+        STORAGE_TYPE("General.Storage-Type", "file"),
+        MYSQL_HOST("General.MySQL.host", "host"),
+        MYSQL_PORT("General.MySQL.port", 3306),
+        MYSQL_DATABASE("General.MySQL.database", "database"),
+        MYSQL_USER("General.MySQL.user", "username"),
+        MYSQL_PASSWORD("General.MySQL.password", "password"),
+        LIST_PAGE_SIZE("list-page-size", 10);
+
+        private final String key;
+        private final Object defaultValue;
+
+        ConfigSetting(String key, Object defaultValue) {
+            this.key = key;
+            this.defaultValue = defaultValue;
+        }
+
+        public void applyDefault(FileConfiguration config) {
+            config.addDefault(this.key, this.defaultValue);
+        }
+
+        public String getString(FileConfiguration config) {
+            return config.getString(this.key, (String) this.defaultValue);
+        }
+
+        public boolean getBoolean(FileConfiguration config) {
+            return config.getBoolean(this.key, (boolean) this.defaultValue);
+        }
+
+        public int getInt(FileConfiguration config) {
+            return config.getInt(this.key, (int) this.defaultValue);
+        }
+
+        public String getKey() {
+            return key;
+        }
     }
 }
