@@ -51,6 +51,11 @@ public class ReplayConfigManager {
             }
         }
 
+        double configuredMaxSpeed = commented.getDouble(ReplayConfigSetting.PLAYBACK_MAX_SPEED.getKey(), 1.0D);
+        if (configuredMaxSpeed < 1.0D) {
+            changed |= commented.setIfDifferent(ReplayConfigSetting.PLAYBACK_MAX_SPEED.getKey(), 1.0D);
+        }
+
         changed |= commented.setIfDifferent(ReplayConfigSetting.CONFIG_VERSION.getKey(), CURRENT_CONFIG_VERSION);
 
         if (changed) {
@@ -72,16 +77,16 @@ public class ReplayConfigManager {
         }
 
         Set<String> managedComments = new HashSet<>();
-        for (String h : HEADER) managedComments.add(h);
+        for (String h : HEADER) managedComments.add(normalizeManagedCommentText(h));
         for (ReplayConfigSetting setting : ReplayConfigSetting.values()) {
-            for (String c : setting.getComments()) managedComments.add(c);
+            for (String c : setting.getComments()) managedComments.add(normalizeManagedCommentText(c));
         }
 
         List<String> cleaned = new ArrayList<>();
         for (String line : lines) {
             String trimmed = line.trim();
             if (trimmed.startsWith("#")) {
-                String body = trimmed.substring(1).trim();
+                String body = normalizeManagedCommentText(trimmed.substring(1));
                 if (managedComments.contains(body)) {
                     continue;
                 }
@@ -93,11 +98,19 @@ public class ReplayConfigManager {
             cleaned.remove(0);
         }
 
+        String configVersionLine = extractTopLevelKeyLine(cleaned, ReplayConfigSetting.CONFIG_VERSION.getKey());
+
         List<String> output = new ArrayList<>();
         for (String h : HEADER) {
             output.add("# " + h);
         }
         output.add("");
+
+        if (configVersionLine != null) {
+            output.add(configVersionLine);
+            output.add("");
+        }
+
         output.addAll(cleaned);
 
         for (ReplayConfigSetting setting : ReplayConfigSetting.values()) {
@@ -112,6 +125,8 @@ public class ReplayConfigManager {
                 output.add(insertAt++, indentStr + "# " + comment);
             }
         }
+
+        output = ensureBlankLinesBetweenRootKeys(output);
 
         try {
             Files.writeString(configFile.toPath(), String.join(System.lineSeparator(), output), StandardCharsets.UTF_8);
@@ -179,5 +194,69 @@ public class ReplayConfigManager {
             i++;
         }
         return i;
+    }
+
+    private String normalizeManagedCommentText(String text) {
+        return text == null ? "" : text.trim();
+    }
+
+    private String extractTopLevelKeyLine(List<String> lines, String key) {
+        String keyPrefix = key + ":";
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
+            String trimmed = line.trim();
+            if (trimmed.startsWith("#") || trimmed.isEmpty()) {
+                continue;
+            }
+            if (countLeadingSpaces(line) == 0 && trimmed.startsWith(keyPrefix)) {
+                lines.remove(i);
+                return line;
+            }
+        }
+        return null;
+    }
+
+    private List<String> ensureBlankLinesBetweenRootKeys(List<String> lines) {
+        List<String> formatted = new ArrayList<>(lines);
+
+        int i = 0;
+        while (i < formatted.size()) {
+            String line = formatted.get(i);
+            if (!isTopLevelKeyLine(line)) {
+                i++;
+                continue;
+            }
+
+            int blockStart = i;
+            while (blockStart > 0 && isTopLevelCommentLine(formatted.get(blockStart - 1))) {
+                blockStart--;
+            }
+
+            while (blockStart > 0 && formatted.get(blockStart - 1).trim().isEmpty()) {
+                formatted.remove(blockStart - 1);
+                blockStart--;
+                i--;
+            }
+
+            if (blockStart > 0) {
+                formatted.add(blockStart, "");
+                i++;
+            }
+            i++;
+        }
+
+        return formatted;
+    }
+
+    private boolean isTopLevelKeyLine(String line) {
+        String trimmed = line.trim();
+        return countLeadingSpaces(line) == 0
+                && !trimmed.isEmpty()
+                && !trimmed.startsWith("#")
+                && trimmed.contains(":");
+    }
+
+    private boolean isTopLevelCommentLine(String line) {
+        return countLeadingSpaces(line) == 0 && line.trim().startsWith("#");
     }
 }

@@ -47,6 +47,10 @@ public class ReplaySession implements Listener, PacketListener {
     private int tick = 0;
     private boolean paused = false;
     private boolean stopped = false;
+    private double playbackSpeed;
+    private final double speedStep;
+    private final double maxSpeed;
+    private double accumulatedTicks = 0.0;
 
     // Delegates
     private final ReplayBlockManager blockManager;
@@ -58,11 +62,24 @@ public class ReplaySession implements Listener, PacketListener {
         this.viewer = viewer;
         this.replay = replay;
 
+        this.speedStep = replay.getConfig().getDouble("Playback.Speed-Step", 0.2);
+        this.maxSpeed = Math.max(1.0D, replay.getConfig().getDouble("Playback.Max-Speed", 1.0D));
+        this.playbackSpeed = 1.0D;
+
         this.blockManager = new ReplayBlockManager(viewer, replay);
         this.playbackEngine = new PlaybackEngine(viewer, replay, trackedEntityIds, deadEntities, recordedEntities, blockManager);
         this.inventoryUI = new ReplayInventoryUI(viewer, () -> recordedEntities, new ReplayInventoryUI.SessionControl() {
-            @Override public void togglePause() { paused = !paused; }
+            @Override public void togglePause() {
+                paused = !paused;
+                if (paused) {
+                    inventoryUI.showStepControls();
+                } else {
+                    inventoryUI.showSpeedControls(playbackSpeed);
+                }
+            }
             @Override public void skipSeconds(int seconds) { ReplaySession.this.skipSeconds(seconds); }
+            @Override public void stepTick(int direction) { ReplaySession.this.stepTick(direction); }
+            @Override public void changeSpeed(int direction) { ReplaySession.this.changeSpeed(direction); }
             @Override public void stop() { ReplaySession.this.stop(); }
             @Override public boolean isActive() { return ReplaySession.this.isActive(); }
         });
@@ -105,6 +122,7 @@ public class ReplaySession implements Listener, PacketListener {
         }
 
         inventoryUI.giveReplayControls();
+        inventoryUI.showSpeedControls(playbackSpeed);
         blockManager.primeInitialBrokenBlockStates(timeline);
 
         Bukkit.getPluginManager().callEvent(new ReplayStartEvent(viewer, this));
@@ -129,8 +147,13 @@ public class ReplaySession implements Listener, PacketListener {
                 return;
             }
 
-            TimelineEvent firstEvent = timeline.get(tick);
-            int recordedTick = firstEvent.tick();
+            accumulatedTicks += playbackSpeed;
+            int tickGroupsToProcess = (int) accumulatedTicks;
+            accumulatedTicks -= tickGroupsToProcess;
+
+            for (int g = 0; g < tickGroupsToProcess && tick < timeline.size(); g++) {
+                TimelineEvent firstEvent = timeline.get(tick);
+                int recordedTick = firstEvent.tick();
 
             while (tick < timeline.size()) {
                 TimelineEvent event = timeline.get(tick);
@@ -209,6 +232,7 @@ public class ReplaySession implements Listener, PacketListener {
                 playbackEngine.handleEvent(recorded, event);
                 tick++;
             }
+            }
             sendActionBar();
         }, 1L, 1L);
     }
@@ -242,6 +266,20 @@ public class ReplaySession implements Listener, PacketListener {
         }
     }
 
+    // -- Speed --
+
+    private void changeSpeed(int direction) {
+        double newSpeed = playbackSpeed + (direction * speedStep);
+        // Round to avoid floating point drift
+        newSpeed = Math.round(newSpeed * 100.0) / 100.0;
+        if (newSpeed < speedStep) newSpeed = speedStep;
+        if (newSpeed > maxSpeed) newSpeed = maxSpeed;
+        playbackSpeed = newSpeed;
+        accumulatedTicks = 0.0;
+        inventoryUI.showSpeedControls(playbackSpeed);
+        sendActionBar();
+    }
+
     // -- Skip / Seek --
 
     private void skipSeconds(int seconds) {
@@ -256,14 +294,40 @@ public class ReplaySession implements Listener, PacketListener {
         if (targetRecordedTick > maxRecordedTick) targetRecordedTick = maxRecordedTick;
 
         int targetIndex = findTimelineIndexAfterRecordedTick(targetRecordedTick);
+        seekToIndex(targetIndex);
+    }
 
-        if (targetIndex != currentIndex) {
-            blockManager.incrementEpoch();
+    private void stepTick(int direction) {
+        if (timeline == null || timeline.isEmpty()) return;
+
+        int currentIndex = Math.max(0, Math.min(tick, timeline.size()));
+
+        if (direction > 0) {
+            // Step forward: advance past the next recorded tick group
+            if (currentIndex >= timeline.size()) return;
+            int recordedTick = timeline.get(currentIndex).tick();
+            int targetIndex = findTimelineIndexAfterRecordedTick(recordedTick);
+            seekToIndex(targetIndex);
+        } else {
+            // Step backward: go to the start of the currently displayed tick group
+            if (currentIndex <= 0) return;
+            int currentRecordedTick = getRecordedTickAtIndex(currentIndex - 1);
+            int startOfCurrentGroup = findTimelineIndexAfterRecordedTick(currentRecordedTick - 1);
+            seekToIndex(startOfCurrentGroup);
         }
+    }
+
+    private void seekToIndex(int targetIndex) {
+        int currentIndex = Math.max(0, Math.min(tick, timeline.size()));
+        targetIndex = Math.max(0, Math.min(targetIndex, timeline.size()));
+
+        if (targetIndex == currentIndex) return;
+
+        blockManager.incrementEpoch();
 
         if (targetIndex > currentIndex) {
             blockManager.applyReplayBlockChangesInRange(currentIndex, targetIndex, timeline);
-        } else if (targetIndex < currentIndex) {
+        } else {
             blockManager.rebuildReplayBlockStateUntil(targetIndex, timeline);
         }
 
@@ -276,6 +340,7 @@ public class ReplaySession implements Listener, PacketListener {
         Map<UUID, TimelineEvent> firstEventByUUID = new LinkedHashMap<>();
         Map<UUID, TimelineEvent> lastLocationByUUID = new LinkedHashMap<>();
         Map<UUID, TimelineEvent.InventoryUpdate> lastInventoryByUUID = new LinkedHashMap<>();
+        Map<UUID, TimelineEvent.HeldItemChange> lastHeldItemByUUID = new LinkedHashMap<>();
         Set<UUID> shouldHaveQuitAtTarget = new HashSet<>();
         Set<UUID> shouldBeDeadAtTarget = new HashSet<>();
 
@@ -297,6 +362,7 @@ public class ReplaySession implements Listener, PacketListener {
                 case TimelineEvent.PlayerMove ignored2 -> lastLocationByUUID.put(uuid, event);
                 case TimelineEvent.EntityMove ignored2 -> lastLocationByUUID.put(uuid, event);
                 case TimelineEvent.InventoryUpdate inv -> lastInventoryByUUID.put(uuid, inv);
+                case TimelineEvent.HeldItemChange hic -> lastHeldItemByUUID.put(uuid, hic);
                 case TimelineEvent.PlayerQuit ignored2 -> shouldHaveQuitAtTarget.add(uuid);
                 case TimelineEvent.EntityDeath ignored2 -> shouldBeDeadAtTarget.add(uuid);
                 default -> {}
@@ -350,6 +416,13 @@ public class ReplaySession implements Listener, PacketListener {
             RecordedEntity entity = recordedEntities.get(entry.getKey());
             if (entity instanceof RecordedPlayer rp) {
                 rp.updateInventory(entry.getValue());
+            }
+        }
+
+        for (Map.Entry<UUID, TimelineEvent.HeldItemChange> entry : lastHeldItemByUUID.entrySet()) {
+            RecordedEntity entity = recordedEntities.get(entry.getKey());
+            if (entity instanceof RecordedPlayer rp) {
+                rp.updateHeldItems(entry.getValue());
             }
         }
     }
@@ -447,9 +520,11 @@ public class ReplaySession implements Listener, PacketListener {
             bar = Component.text("\u23F8 Replay paused: ", NamedTextColor.YELLOW)
                     .append(Component.text(current + " / " + total, NamedTextColor.GRAY));
         } else {
+            String speedText = String.format("%.1fx", playbackSpeed);
             bar = Component.text("\u25B6 Replay: ", NamedTextColor.GREEN)
                     .append(Component.text(current + " / " + total, NamedTextColor.GRAY))
-                    .append(Component.text(" (" + percent + "%)", NamedTextColor.DARK_GRAY));
+                    .append(Component.text(" (" + percent + "%)", NamedTextColor.DARK_GRAY))
+                    .append(Component.text(" [" + speedText + "]", NamedTextColor.AQUA));
         }
         viewer.sendActionBar(bar);
     }

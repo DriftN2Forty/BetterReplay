@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Static `Replay.getInstance()` NPEs in test environments (#32)
 - Deprecation warnings and unused imports cleaned up
 - Config migration comment placement and header ordering for generated configs (pending merge in #36)
+- Wrapped YAML pseudo-comment values now load correctly during idempotent config initialization (prevents parse failure on long comment lines)
+- Config rewrite now deduplicates managed header text and keeps `Config-Version` at the top for cleaner layout
+- Config migration no longer accumulates extra blank lines between `Config-Version` and subsequent root sections
 
 ### Changed
 - All commands routed through `ReplayManager` API (#25)
@@ -30,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All `printStackTrace()` calls replaced with proper logger calls
 - CI actions bumped to v4 for Node.js 24 compatibility
 - Config settings ownership moved out of `Replay` into a dedicated comment-preserving config manager (pending merge in #36)
+- Replay sessions now always start at `1.0x` speed; `Playback.Max-Speed` is enforced to a minimum of `1.0`
+- Generated config output now inserts blank lines between root-level keys/sections for readability
 
 ## [1.4.0] - 2026-04-10
 

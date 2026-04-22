@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -47,6 +48,7 @@ class ReplayConfigManagerTest {
         new ReplayConfigManager(plugin).initialize();
 
         String migrated = Files.readString(configFile, StandardCharsets.UTF_8);
+        String nl = System.lineSeparator();
         assertTrue(migrated.startsWith("# ==========================================="));
         assertTrue(migrated.contains("# Internal config migration version. Do not edit unless instructed."));
         assertTrue(migrated.contains("Config-Version: 2"));
@@ -54,6 +56,9 @@ class ReplayConfigManagerTest {
         assertTrue(migrated.contains("# Number of replay names shown per /replay list page."));
         assertTrue(migrated.indexOf("# MySQL host name or IP address.") < migrated.indexOf("host:"));
         assertTrue(migrated.indexOf("# Check for plugin updates on startup.") < migrated.indexOf("Check-Update:"));
+        assertTrue(migrated.indexOf("Config-Version: 2") < migrated.indexOf("General:"));
+        assertTrue(migrated.contains("Config-Version: 2" + nl + nl + "General:"));
+        assertTrue(migrated.contains("password: password" + nl + nl + "# Number of replay names shown per /replay list page."));
 
         verify(plugin).reloadConfig();
     }
@@ -83,8 +88,30 @@ class ReplayConfigManagerTest {
         manager.initialize();
 
         String migrated = Files.readString(configFile, StandardCharsets.UTF_8);
+        String nl = System.lineSeparator();
         String checkUpdateComment = "# Check for plugin updates on startup.";
         assertEquals(1, occurrencesOf(migrated, checkUpdateComment));
+        assertEquals(1, occurrencesOf(migrated, "#         BetterReplay Configuration"));
+        assertTrue(migrated.indexOf("Config-Version: 2") < migrated.indexOf("General:"));
+        assertTrue(migrated.contains("Config-Version: 2" + nl + nl + "General:"));
+        assertFalse(migrated.contains("Config-Version: 2" + nl + nl + nl + "General:"));
+    }
+
+    @Test
+    void initialize_clampsPlaybackMaxSpeed_toAtLeastOne() throws IOException {
+        Path configFile = tempDir.resolve("config.yml");
+        Files.writeString(configFile, """
+                Playback:
+                  Max-Speed: 0.5
+                """, StandardCharsets.UTF_8);
+
+        when(plugin.getDataFolder()).thenReturn(tempDir.toFile());
+        when(plugin.getName()).thenReturn("BetterReplay");
+
+        new ReplayConfigManager(plugin).initialize();
+
+        String migrated = Files.readString(configFile, StandardCharsets.UTF_8);
+        assertTrue(migrated.contains("Max-Speed: 1.0"));
     }
 
     private int occurrencesOf(String haystack, String needle) {

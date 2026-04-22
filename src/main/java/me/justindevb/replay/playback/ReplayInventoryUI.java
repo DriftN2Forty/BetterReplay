@@ -35,6 +35,8 @@ public class ReplayInventoryUI implements Listener {
     public interface SessionControl {
         void togglePause();
         void skipSeconds(int seconds);
+        void stepTick(int direction);
+        void changeSpeed(int direction);
         void stop();
         boolean isActive();
     }
@@ -106,13 +108,50 @@ public class ReplayInventoryUI implements Listener {
         menuMeta.displayName(Component.text("Players", NamedTextColor.AQUA));
         playerMenu.setItemMeta(menuMeta);
 
-        viewer.getInventory().setItem(4, pauseButton);
-        viewer.getInventory().setItem(5, skipForward);
-        viewer.getInventory().setItem(3, skipBackward);
-        viewer.getInventory().setItem(6, playerMenu);
+        viewer.getInventory().setItem(0, skipBackward);
+        viewer.getInventory().setItem(1, pauseButton);
+        viewer.getInventory().setItem(2, skipForward);
+        viewer.getInventory().setItem(3, playerMenu);
         viewer.getInventory().setItem(8, stopReplay);
 
-        viewer.getInventory().setHeldItemSlot(4);
+        viewer.getInventory().setHeldItemSlot(1);
+    }
+
+    public void showStepControls() {
+        ItemStack stepBack = new ItemStack(Material.CYAN_DYE);
+        ItemMeta backMeta = stepBack.getItemMeta();
+        backMeta.displayName(Component.text("\u25C0\u25C0 Previous Frame", NamedTextColor.AQUA));
+        stepBack.setItemMeta(backMeta);
+
+        ItemStack stepForward = new ItemStack(Material.MAGENTA_DYE);
+        ItemMeta fwdMeta = stepForward.getItemMeta();
+        fwdMeta.displayName(Component.text("\u25B6\u25B6 Next Frame", NamedTextColor.LIGHT_PURPLE));
+        stepForward.setItemMeta(fwdMeta);
+
+        viewer.getInventory().setItem(5, stepBack);
+        viewer.getInventory().setItem(6, stepForward);
+    }
+
+    public void hideStepControls() {
+        viewer.getInventory().setItem(5, null);
+        viewer.getInventory().setItem(6, null);
+    }
+
+    public void showSpeedControls(double currentSpeed) {
+        String speedText = String.format("%.1fx", currentSpeed);
+
+        ItemStack slower = new ItemStack(Material.ORANGE_DYE);
+        ItemMeta slowerMeta = slower.getItemMeta();
+        slowerMeta.displayName(Component.text("\u23EA Slower", NamedTextColor.GOLD));
+        slower.setItemMeta(slowerMeta);
+
+        ItemStack faster = new ItemStack(Material.LIGHT_BLUE_DYE);
+        ItemMeta fasterMeta = faster.getItemMeta();
+        fasterMeta.displayName(Component.text("\u23E9 Faster", NamedTextColor.BLUE));
+        faster.setItemMeta(fasterMeta);
+
+        viewer.getInventory().setItem(5, slower);
+        viewer.getInventory().setItem(6, faster);
     }
 
     public void openPlayerMenu() {
@@ -253,6 +292,10 @@ public class ReplayInventoryUI implements Listener {
             case "Pause / Play" -> sessionControl.togglePause();
             case "+5 seconds" -> sessionControl.skipSeconds(5);
             case "-5 seconds" -> sessionControl.skipSeconds(-5);
+            case "\u25C0\u25C0 Previous Frame" -> sessionControl.stepTick(-1);
+            case "\u25B6\u25B6 Next Frame" -> sessionControl.stepTick(1);
+            case "\u23EA Slower" -> sessionControl.changeSpeed(-1);
+            case "\u23E9 Faster" -> sessionControl.changeSpeed(1);
             case "Exit Replay" -> sessionControl.stop();
             case "Players" -> openPlayerMenu();
         }
@@ -330,7 +373,9 @@ public class ReplayInventoryUI implements Listener {
 
         Component dropDisplayName = item.getItemMeta().displayName();
         String dropName = dropDisplayName instanceof TextComponent tc ? tc.content() : "";
-        if (dropName.equals("Pause / Play") || dropName.equals("+5 seconds") || dropName.equals("-5 seconds")) {
+        if (dropName.equals("Pause / Play") || dropName.equals("+5 seconds") || dropName.equals("-5 seconds")
+                || dropName.equals("\u25C0\u25C0 Previous Frame") || dropName.equals("\u25B6\u25B6 Next Frame")
+                || dropName.equals("\u23EA Slower") || dropName.equals("\u23E9 Faster")) {
             e.setCancelled(true);
         }
     }
