@@ -126,6 +126,8 @@ public class ReplayConfigManager {
             }
         }
 
+        output = ensureBlankLinesBetweenRootKeys(output);
+
         try {
             Files.writeString(configFile.toPath(), String.join(System.lineSeparator(), output), StandardCharsets.UTF_8);
         } catch (IOException e) {
@@ -212,5 +214,48 @@ public class ReplayConfigManager {
             }
         }
         return null;
+    }
+
+    private List<String> ensureBlankLinesBetweenRootKeys(List<String> lines) {
+        List<String> formatted = new ArrayList<>(lines);
+
+        int i = 0;
+        boolean seenFirstRootKeyBlock = false;
+        while (i < formatted.size()) {
+            String line = formatted.get(i);
+            if (!isTopLevelKeyLine(line)) {
+                i++;
+                continue;
+            }
+
+            int blockStart = i;
+            while (blockStart > 0 && isTopLevelCommentLine(formatted.get(blockStart - 1))) {
+                blockStart--;
+            }
+
+            if (seenFirstRootKeyBlock
+                    && blockStart > 0
+                    && !formatted.get(blockStart - 1).trim().isEmpty()) {
+                formatted.add(blockStart, "");
+                i++;
+            }
+
+            seenFirstRootKeyBlock = true;
+            i++;
+        }
+
+        return formatted;
+    }
+
+    private boolean isTopLevelKeyLine(String line) {
+        String trimmed = line.trim();
+        return countLeadingSpaces(line) == 0
+                && !trimmed.isEmpty()
+                && !trimmed.startsWith("#")
+                && trimmed.contains(":");
+    }
+
+    private boolean isTopLevelCommentLine(String line) {
+        return countLeadingSpaces(line) == 0 && line.trim().startsWith("#");
     }
 }
