@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -87,10 +88,13 @@ class ReplayConfigManagerTest {
         manager.initialize();
 
         String migrated = Files.readString(configFile, StandardCharsets.UTF_8);
+        String nl = System.lineSeparator();
         String checkUpdateComment = "# Check for plugin updates on startup.";
         assertEquals(1, occurrencesOf(migrated, checkUpdateComment));
         assertEquals(1, occurrencesOf(migrated, "#         BetterReplay Configuration"));
         assertTrue(migrated.indexOf("Config-Version: 2") < migrated.indexOf("General:"));
+        assertTrue(migrated.contains("Config-Version: 2" + nl + nl + "General:"));
+        assertFalse(migrated.contains("Config-Version: 2" + nl + nl + nl + "General:"));
     }
 
     @Test

@@ -220,7 +220,6 @@ public class ReplayConfigManager {
         List<String> formatted = new ArrayList<>(lines);
 
         int i = 0;
-        boolean seenFirstRootKeyBlock = false;
         while (i < formatted.size()) {
             String line = formatted.get(i);
             if (!isTopLevelKeyLine(line)) {
@@ -233,14 +232,16 @@ public class ReplayConfigManager {
                 blockStart--;
             }
 
-            if (seenFirstRootKeyBlock
-                    && blockStart > 0
-                    && !formatted.get(blockStart - 1).trim().isEmpty()) {
+            while (blockStart > 0 && formatted.get(blockStart - 1).trim().isEmpty()) {
+                formatted.remove(blockStart - 1);
+                blockStart--;
+                i--;
+            }
+
+            if (blockStart > 0) {
                 formatted.add(blockStart, "");
                 i++;
             }
-
-            seenFirstRootKeyBlock = true;
             i++;
         }
 
