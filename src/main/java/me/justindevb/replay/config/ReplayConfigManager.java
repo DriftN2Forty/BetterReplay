@@ -72,16 +72,16 @@ public class ReplayConfigManager {
         }
 
         Set<String> managedComments = new HashSet<>();
-        for (String h : HEADER) managedComments.add(h);
+        for (String h : HEADER) managedComments.add(normalizeManagedCommentText(h));
         for (ReplayConfigSetting setting : ReplayConfigSetting.values()) {
-            for (String c : setting.getComments()) managedComments.add(c);
+            for (String c : setting.getComments()) managedComments.add(normalizeManagedCommentText(c));
         }
 
         List<String> cleaned = new ArrayList<>();
         for (String line : lines) {
             String trimmed = line.trim();
             if (trimmed.startsWith("#")) {
-                String body = trimmed.substring(1).trim();
+                String body = normalizeManagedCommentText(trimmed.substring(1));
                 if (managedComments.contains(body)) {
                     continue;
                 }
@@ -93,11 +93,19 @@ public class ReplayConfigManager {
             cleaned.remove(0);
         }
 
+        String configVersionLine = extractTopLevelKeyLine(cleaned, ReplayConfigSetting.CONFIG_VERSION.getKey());
+
         List<String> output = new ArrayList<>();
         for (String h : HEADER) {
             output.add("# " + h);
         }
         output.add("");
+
+        if (configVersionLine != null) {
+            output.add(configVersionLine);
+            output.add("");
+        }
+
         output.addAll(cleaned);
 
         for (ReplayConfigSetting setting : ReplayConfigSetting.values()) {
@@ -179,5 +187,25 @@ public class ReplayConfigManager {
             i++;
         }
         return i;
+    }
+
+    private String normalizeManagedCommentText(String text) {
+        return text == null ? "" : text.trim();
+    }
+
+    private String extractTopLevelKeyLine(List<String> lines, String key) {
+        String keyPrefix = key + ":";
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
+            String trimmed = line.trim();
+            if (trimmed.startsWith("#") || trimmed.isEmpty()) {
+                continue;
+            }
+            if (countLeadingSpaces(line) == 0 && trimmed.startsWith(keyPrefix)) {
+                lines.remove(i);
+                return line;
+            }
+        }
+        return null;
     }
 }

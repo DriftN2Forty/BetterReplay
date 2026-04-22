@@ -54,6 +54,7 @@ class ReplayConfigManagerTest {
         assertTrue(migrated.contains("# Number of replay names shown per /replay list page."));
         assertTrue(migrated.indexOf("# MySQL host name or IP address.") < migrated.indexOf("host:"));
         assertTrue(migrated.indexOf("# Check for plugin updates on startup.") < migrated.indexOf("Check-Update:"));
+        assertTrue(migrated.indexOf("Config-Version: 2") < migrated.indexOf("General:"));
 
         verify(plugin).reloadConfig();
     }
@@ -85,6 +86,8 @@ class ReplayConfigManagerTest {
         String migrated = Files.readString(configFile, StandardCharsets.UTF_8);
         String checkUpdateComment = "# Check for plugin updates on startup.";
         assertEquals(1, occurrencesOf(migrated, checkUpdateComment));
+        assertEquals(1, occurrencesOf(migrated, "#         BetterReplay Configuration"));
+        assertTrue(migrated.indexOf("Config-Version: 2") < migrated.indexOf("General:"));
     }
 
     private int occurrencesOf(String haystack, String needle) {

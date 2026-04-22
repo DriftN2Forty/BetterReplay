@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deprecation warnings and unused imports cleaned up
 - Config migration comment placement and header ordering for generated configs (pending merge in #36)
 - Wrapped YAML pseudo-comment values now load correctly during idempotent config initialization (prevents parse failure on long comment lines)
+- Config rewrite now deduplicates managed header text and keeps `Config-Version` at the top for cleaner layout
 
 ### Changed
 - All commands routed through `ReplayManager` API (#25)
