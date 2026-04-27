@@ -8,7 +8,8 @@ import me.justindevb.replay.recording.RecordingEventHandler;
 import me.justindevb.replay.recording.RecordingPacketHandler;
 import me.justindevb.replay.recording.TimelineBuilder;
 import me.justindevb.replay.recording.TimelineEvent;
-import me.justindevb.replay.util.ReplayObject;
+import me.justindevb.replay.storage.binary.BinaryReplayAppendLogReader;
+import me.justindevb.replay.storage.binary.BinaryReplayAppendLogWriter;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
@@ -18,6 +19,7 @@ import org.bukkit.event.HandlerList;
 import org.bukkit.inventory.ItemStack;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.*;
 
 import static me.justindevb.replay.util.io.ItemStackSerializer.serializeItem;
@@ -28,12 +30,16 @@ import static me.justindevb.replay.util.io.ItemStackSerializer.serializeItem;
  */
 public class RecordingSession {
 
+    private static final int APPEND_LOG_FLUSH_INTERVAL_TICKS = 20;
+
     private final Replay replay;
     private final String name;
-    private final File file;
+    private final File appendLogFile;
 
     private final EntityTracker tracker;
     private final TimelineBuilder builder;
+    private final BinaryReplayAppendLogWriter appendLogWriter;
+    private final BinaryReplayAppendLogReader appendLogReader;
     private final RecordingEventHandler eventHandler;
     private final RecordingPacketHandler packetHandler;
     private PacketListenerCommon packetListenerHandle;
@@ -46,18 +52,25 @@ public class RecordingSession {
 
     public RecordingSession(String name, File folder, Collection<Player> players, int durationSeconds) {
         this.name = name;
-        this.file = new File(folder, "replays/" + name + ".json");
         this.durationTicks = durationSeconds > 0 ? durationSeconds * 20 : -1;
         this.replay = Replay.getInstance();
+        this.appendLogFile = new File(folder, "replays/.tmp/" + name + ".appendlog");
+        this.appendLogReader = new BinaryReplayAppendLogReader();
+
+        try {
+            this.appendLogWriter = new BinaryReplayAppendLogWriter(appendLogFile.toPath());
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to create recording append-log for " + name, e);
+        }
 
         this.tracker = new EntityTracker(players);
-        this.builder = new TimelineBuilder();
+        this.builder = new TimelineBuilder(appendLogWriter, false);
         this.eventHandler = new RecordingEventHandler(tracker, builder, this::getTick);
         this.packetHandler = new RecordingPacketHandler(tracker, builder, this::getTick);
     }
 
     public void start() {
-        if (!file.getParentFile().exists()) file.getParentFile().mkdirs();
+        if (!appendLogFile.getParentFile().exists()) appendLogFile.getParentFile().mkdirs();
 
         Bukkit.getLogger().info("Started recording: " + name + " for " + tracker.getTrackedPlayers().size()
                 + " player(s), duration=" + (durationTicks == -1 ? "∞" : durationTicks / 20 + "s"));
@@ -113,6 +126,10 @@ public class RecordingSession {
             tickInventoryCheck();
         }
 
+        if ((tick + 1) % APPEND_LOG_FLUSH_INTERVAL_TICKS == 0) {
+            flushAppendLog();
+        }
+
         tick++;
     }
 
@@ -151,15 +168,24 @@ public class RecordingSession {
 
         tracker.clearPlayers();
 
-        if (!save) return;
+        closeAppendLog();
 
-        ReplayObject replayObject = new ReplayObject(
-                name,
-                builder.getTimeline(),
-                replay.getReplayStorage()
-        );
+        if (!save) {
+            deleteAppendLog();
+            return;
+        }
 
-        replayObject.save()
+        List<TimelineEvent> timeline;
+        try {
+            timeline = appendLogReader.readTimeline(appendLogFile.toPath());
+        } catch (IOException e) {
+            replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to read recording temp log: " + name, e);
+            return;
+        }
+
+        deleteAppendLog();
+
+        replay.getReplayStorage().saveReplay(name, timeline)
                 .thenCompose(v ->
                         replay.getReplayStorage().listReplays()
                 )
@@ -182,7 +208,12 @@ public class RecordingSession {
     }
 
     public List<TimelineEvent> getTimeline() {
-        return builder.getTimeline();
+        flushAppendLog();
+        try {
+            return appendLogReader.readTimeline(appendLogFile.toPath());
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read recording temp log for " + name, e);
+        }
     }
 
     public Set<UUID> getTrackedPlayers() {
@@ -199,6 +230,28 @@ public class RecordingSession {
             if (p == null || !p.isOnline()) continue;
 
             builder.addEvent(builder.captureInventory(tick, uuid.toString(), p));
+        }
+    }
+
+    private void flushAppendLog() {
+        try {
+            appendLogWriter.flush();
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to flush recording temp log for " + name, e);
+        }
+    }
+
+    private void closeAppendLog() {
+        try {
+            appendLogWriter.close();
+        } catch (IOException e) {
+            replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to close recording temp log: " + name, e);
+        }
+    }
+
+    private void deleteAppendLog() {
+        if (appendLogFile.exists()) {
+            appendLogFile.delete();
         }
     }
 }
