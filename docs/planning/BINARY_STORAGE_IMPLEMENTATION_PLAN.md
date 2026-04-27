@@ -323,11 +323,12 @@ That slice will validate the highest-risk decisions early: framing, string defin
 
 - None at the storage-format level. Remaining implementation choices are now library wiring and code structure details.
 
-## Suggested Follow-Up Documents
+## Supporting Documents
 
-After implementation starts, split this planning work into smaller living docs only if needed:
+The primary long-lived reference documents for this work now live in the main `docs/` folder:
 
-- binary format spec
-- archive manifest schema
-- migration/deprecation note for JSON support
-- benchmark notes from prototype measurements
+- `docs/BINARY_FORMAT_SPEC.md`
+- `docs/ARCHIVE_MANIFEST_SCHEMA.md`
+- `docs/DEPRECATIONS.md`
+
+Benchmark notes should be created only after there is real prototype or production-like measurement data to preserve.

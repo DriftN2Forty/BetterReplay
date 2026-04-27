@@ -158,6 +158,19 @@ manager.startReplay("demo-session", viewerPlayer);
 
 For full documentation of every method, all events, and a complete example plugin, see the **[API Documentation](docs/API.md)**.
 
+## Documentation
+
+Primary docs:
+
+- [docs/API.md](docs/API.md) - public API reference
+- [docs/BINARY_FORMAT_SPEC.md](docs/BINARY_FORMAT_SPEC.md) - v1 binary replay payload and archive structure
+- [docs/ARCHIVE_MANIFEST_SCHEMA.md](docs/ARCHIVE_MANIFEST_SCHEMA.md) - `manifest.json` field definitions and validation rules
+- [docs/DEPRECATIONS.md](docs/DEPRECATIONS.md) - planned feature and compatibility removals
+
+Planning docs:
+
+- [docs/planning](docs/planning) - design notes, comparisons, and implementation planning documents
+
 ## Changelog
 
 A full history of changes, additions, and fixes is tracked in **[CHANGELOG.md](CHANGELOG.md)**, following the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
