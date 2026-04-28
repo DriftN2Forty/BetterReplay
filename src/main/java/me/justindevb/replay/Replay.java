@@ -74,6 +74,7 @@ public class Replay extends JavaPlugin {
         ReplayAPI.init(manager);
 
         initStorage();
+        recorderManager.recoverPendingAppendLogs();
 
         initBstats();
 

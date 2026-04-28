@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Replay exports created via `/replay export` now write to the plugin `exports/` folder instead of the system temp directory
+- Pending `.appendlog` temp files left behind after a server crash are now recovered automatically on startup, including files with a truncated tail that still contain a valid replay prefix
 - `activeSessions` in `RecorderManager` changed to `ConcurrentHashMap` to prevent `ConcurrentModificationException` (#33)
 - Nested replay inventory loss when starting a replay during an active replay (#31)
 - Replay controls getting stuck after replay ends (#27)
