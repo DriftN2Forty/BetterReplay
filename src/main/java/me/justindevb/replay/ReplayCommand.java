@@ -1,6 +1,8 @@
 package me.justindevb.replay;
 
 import me.justindevb.replay.api.ReplayManager;
+import me.justindevb.replay.benchmark.ReplayBenchmarkCommand;
+import me.justindevb.replay.export.ReplayExportCommand;
 import me.justindevb.replay.config.ReplayConfigSetting;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -20,13 +22,28 @@ import java.util.logging.Level;
 
 public class ReplayCommand implements CommandExecutor, TabCompleter {
     private final ReplayManager replayManager;
+    private final ReplayBenchmarkCommand replayBenchmarkCommand;
+    private final ReplayExportCommand replayExportCommand;
 
     public ReplayCommand(ReplayManager replayManager) {
+        this(replayManager, null, null);
+    }
+
+    ReplayCommand(ReplayManager replayManager, ReplayBenchmarkCommand replayBenchmarkCommand, ReplayExportCommand replayExportCommand) {
         this.replayManager = replayManager;
+        this.replayBenchmarkCommand = replayBenchmarkCommand;
+        this.replayExportCommand = replayExportCommand;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
+        if (args.length > 0 && args[0].equalsIgnoreCase("export") && replayExportCommand != null) {
+            return replayExportCommand.handle(sender, args);
+        }
+        if (args.length > 0 && args[0].equalsIgnoreCase("benchmark") && replayBenchmarkCommand != null) {
+            return replayBenchmarkCommand.handle(sender, args);
+        }
+
         if (!(sender instanceof Player p)) {
             sender.sendMessage("Must be a player to execute this command");
             return true;
@@ -245,6 +262,14 @@ public class ReplayCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command cmd, String alias, String[] args) {
+
+        if (args.length > 0 && args[0].equalsIgnoreCase("export") && replayExportCommand != null) {
+            return replayExportCommand.tabComplete(sender, args);
+        }
+
+        if (args.length > 0 && args[0].equalsIgnoreCase("benchmark") && replayBenchmarkCommand != null) {
+            return replayBenchmarkCommand.tabComplete(sender, args);
+        }
 
         if (args.length == 1) {
             List<String> completions = new ArrayList<>();

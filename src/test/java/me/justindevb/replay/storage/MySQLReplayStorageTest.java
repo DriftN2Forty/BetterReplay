@@ -64,8 +64,6 @@ class MySQLReplayStorageTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        when(plugin.getConfig()).thenReturn(config);
-        when(config.getBoolean("General.Compress-Replays", true)).thenReturn(true);
         when(plugin.getPluginMeta()).thenReturn(pluginMeta);
         when(pluginMeta.getVersion()).thenReturn("1.4.0");
         when(plugin.getFoliaLib()).thenReturn(foliaLib);

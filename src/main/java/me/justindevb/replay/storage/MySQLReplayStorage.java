@@ -2,7 +2,6 @@ package me.justindevb.replay.storage;
 
 import me.justindevb.replay.Replay;
 import me.justindevb.replay.api.ReplayExportQuery;
-import me.justindevb.replay.config.ReplayConfigSetting;
 import me.justindevb.replay.recording.TimelineEvent;
 import me.justindevb.replay.storage.binary.BinaryReplayStorageCodec;
 import me.justindevb.replay.util.io.ReplayCompressor;
@@ -39,14 +38,13 @@ public class MySQLReplayStorage implements ReplayStorage {
         init();
     }
 
-    /** Returns true when the plugin config has compression enabled (default: true). */
-    private boolean isCompressionEnabled() {
-        return saveCodec.supportsCompression() && ReplayConfigSetting.COMPRESS_REPLAYS.getBoolean(replay.getConfig());
+    private boolean usesCodecCompression() {
+        return saveCodec.supportsCompression();
     }
 
     private byte[] encodeForStorage(List<TimelineEvent> timeline) throws IOException {
         byte[] payload = saveCodec.encodeTimeline(timeline, replay.getPluginMeta().getVersion());
-        return isCompressionEnabled() ? ReplayCompressor.compress(new String(payload, java.nio.charset.StandardCharsets.UTF_8)) : payload;
+        return usesCodecCompression() ? ReplayCompressor.compress(new String(payload, java.nio.charset.StandardCharsets.UTF_8)) : payload;
     }
 
     private void init() {

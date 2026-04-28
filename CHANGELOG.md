@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 6 backend integration with `.br` saves for file and MySQL storage, MySQL `LONGBLOB` migration, and mixed JSON/binary backend compatibility coverage
 - Phase 7 filtered replay export with `ReplayExportQuery`, player and tick-range filters, `player=all` defaults, and binary archive exports built from lazy indexed scans
 - Phase 8 legacy-compatibility prep keeps JSON replay loading during the transition, prefers `.br` when mixed file payloads coexist, and documents JSON support as temporary compatibility slated for later removal
+- Hidden admin replay export command via `/replay export` with optional named player and tick-range filters
+- Hidden admin benchmark diagnostics via `/replay benchmark` with small/medium/large synthetic workloads and Markdown/JSON report output
 
 ### Fixed
 - `activeSessions` in `RecorderManager` changed to `ConcurrentHashMap` to prevent `ConcurrentModificationException` (#33)
@@ -43,6 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Config settings ownership moved out of `Replay` into a dedicated comment-preserving config manager (pending merge in #36)
 - Replay sessions now always start at `1.0x` speed; `Playback.Max-Speed` is enforced to a minimum of `1.0`
 - Generated config output now inserts blank lines between root-level keys/sections for readability
+- Benchmark reports now expose `Decode` as the load-path metric and no longer duplicate the same cost under a separate `Open` column
+- Replay storage no longer exposes `General.Compress-Replays`; codecs that support legacy JSON compression now apply it automatically, and migrated configs drop the obsolete key
 
 ## [1.4.0] - 2026-04-10
 

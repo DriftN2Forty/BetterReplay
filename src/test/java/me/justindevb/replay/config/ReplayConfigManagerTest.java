@@ -52,13 +52,17 @@ class ReplayConfigManagerTest {
         assertTrue(migrated.startsWith("# ==========================================="));
         assertTrue(migrated.contains("# Internal config migration version. Do not edit unless instructed."));
         assertTrue(migrated.contains("Config-Version: 2"));
+        assertFalse(migrated.contains("Compress-Replays:"));
         assertTrue(migrated.contains("# Check for plugin updates on startup."));
+        assertTrue(migrated.contains("# Enable the hidden admin-only /replay benchmark command."));
         assertTrue(migrated.contains("# Number of replay names shown per /replay list page."));
         assertTrue(migrated.indexOf("# MySQL host name or IP address.") < migrated.indexOf("host:"));
         assertTrue(migrated.indexOf("# Check for plugin updates on startup.") < migrated.indexOf("Check-Update:"));
+        assertTrue(migrated.indexOf("# Enable the hidden admin-only /replay benchmark command.")
+            < migrated.indexOf("Enable-Benchmark-Command:"));
         assertTrue(migrated.indexOf("Config-Version: 2") < migrated.indexOf("General:"));
         assertTrue(migrated.contains("Config-Version: 2" + nl + nl + "General:"));
-        assertTrue(migrated.contains("password: password" + nl + nl + "# Number of replay names shown per /replay list page."));
+        assertTrue(migrated.indexOf("password: password") < migrated.indexOf("# Number of replay names shown per /replay list page."));
 
         verify(plugin).reloadConfig();
     }
@@ -92,6 +96,7 @@ class ReplayConfigManagerTest {
         String checkUpdateComment = "# Check for plugin updates on startup.";
         assertEquals(1, occurrencesOf(migrated, checkUpdateComment));
         assertEquals(1, occurrencesOf(migrated, "#         BetterReplay Configuration"));
+        assertFalse(migrated.contains("Compress-Replays:"));
         assertTrue(migrated.indexOf("Config-Version: 2") < migrated.indexOf("General:"));
         assertTrue(migrated.contains("Config-Version: 2" + nl + nl + "General:"));
         assertFalse(migrated.contains("Config-Version: 2" + nl + nl + nl + "General:"));

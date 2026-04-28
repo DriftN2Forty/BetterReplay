@@ -73,6 +73,8 @@ Subcommands:
 - play
 - list
 - delete
+- export (hidden admin utility command)
+- benchmark (hidden admin diagnostic command)
 
 Permissions:
 - replay.start
@@ -80,7 +82,17 @@ Permissions:
 - replay.play
 - replay.list
 - replay.delete
+- replay.export
+- replay.benchmark
 - replay.*
+
+Hidden export usage:
+- `/replay export <name> [player=<name|all>] [start=<tick>] [end=<tick>]` exports a replay to a temporary `.br` file and prints the generated path.
+- Replay names may contain spaces as long as all filter arguments come after the full replay name.
+
+Hidden benchmark usage:
+- `/replay benchmark run <small|medium|large|all>` starts an asynchronous synthetic benchmark run and writes both Markdown and JSON reports under the plugin `benchmarks/` folder.
+- `/replay benchmark last` prints the most recent report file paths.
 
 ## Configuration
 
@@ -107,6 +119,7 @@ These values should be lowercase as shown above.
 ```yaml
 General:
   Check-Update: true
+  Enable-Benchmark-Command: false
   Storage-Type: file
 ```
 
@@ -115,6 +128,7 @@ General:
 ```yaml
 General:
   Check-Update: true
+  Enable-Benchmark-Command: false
   Storage-Type: mysql
   MySQL:
     host: 127.0.0.1
@@ -135,6 +149,7 @@ Notes:
 - MySQL replay names are stored in a VARCHAR(64) primary key column.
 - Binary `.br` payloads require the replay data column to be `LONGBLOB`; the plugin now widens `data` automatically during storage initialization.
 - Legacy JSON replay support is temporary compatibility only and is planned for removal in a later version; new recordings should stay on `.br`.
+- `General.Enable-Benchmark-Command` defaults to `false` and must be enabled before the hidden `/replay benchmark` diagnostic command can run.
 
 ## Build from source
 
@@ -171,6 +186,7 @@ For full documentation of every method, all events, and a complete example plugi
 Primary docs:
 
 - [docs/API.md](docs/API.md) - public API reference
+- [docs/BENCHMARKS.md](docs/BENCHMARKS.md) - benchmark command usage, workload presets, and metric definitions
 - [docs/BINARY_FORMAT_SPEC.md](docs/BINARY_FORMAT_SPEC.md) - v1 binary replay payload and archive structure
 - [docs/ARCHIVE_MANIFEST_SCHEMA.md](docs/ARCHIVE_MANIFEST_SCHEMA.md) - `manifest.json` field definitions and validation rules
 - [docs/DEPRECATIONS.md](docs/DEPRECATIONS.md) - planned feature and compatibility removals

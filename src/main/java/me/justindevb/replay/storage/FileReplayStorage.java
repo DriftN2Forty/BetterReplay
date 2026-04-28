@@ -2,7 +2,6 @@ package me.justindevb.replay.storage;
 
 import me.justindevb.replay.Replay;
 import me.justindevb.replay.api.ReplayExportQuery;
-import me.justindevb.replay.config.ReplayConfigSetting;
 import me.justindevb.replay.recording.TimelineEvent;
 import me.justindevb.replay.storage.binary.BinaryReplayFormat;
 import me.justindevb.replay.storage.binary.BinaryReplayStorageCodec;
@@ -41,9 +40,8 @@ public class FileReplayStorage implements ReplayStorage {
             replayFolder.mkdirs();
     }
 
-    /** Returns true when the plugin config has compression enabled (default: true). */
-    private boolean isCompressionEnabled() {
-        return saveCodec.supportsCompression() && ReplayConfigSetting.COMPRESS_REPLAYS.getBoolean(replay.getConfig());
+    private boolean usesCodecCompression() {
+        return saveCodec.supportsCompression();
     }
 
     /**
@@ -58,14 +56,14 @@ public class FileReplayStorage implements ReplayStorage {
         if (compressed.exists()) return compressed;
         File plain = new File(replayFolder, name + JsonReplayStorageCodec.EXT_UNCOMPRESSED);
         if (plain.exists()) return plain;
-        File preferred = new File(replayFolder, name + saveCodec.fileExtension(isCompressionEnabled()));
+        File preferred = new File(replayFolder, name + saveCodec.fileExtension(usesCodecCompression()));
         if (preferred.exists()) return preferred;
         return null;
     }
 
     private byte[] encodeForStorage(List<TimelineEvent> timeline) throws IOException {
         byte[] payload = saveCodec.encodeTimeline(timeline, replay.getPluginMeta().getVersion());
-        return isCompressionEnabled() ? ReplayCompressor.compress(new String(payload, java.nio.charset.StandardCharsets.UTF_8)) : payload;
+        return usesCodecCompression() ? ReplayCompressor.compress(new String(payload, java.nio.charset.StandardCharsets.UTF_8)) : payload;
     }
 
     private void removeLegacyJsonVariants(String name, String retainedExtension) {
@@ -81,7 +79,7 @@ public class FileReplayStorage implements ReplayStorage {
     public CompletableFuture<Void> saveReplay(String name, List<TimelineEvent> timeline) {
         return CompletableFuture.runAsync(() -> {
             try {
-                boolean compressionEnabled = isCompressionEnabled();
+                boolean compressionEnabled = usesCodecCompression();
                 String extension = saveCodec.fileExtension(compressionEnabled);
                 File file = new File(replayFolder, name + extension);
                 Files.write(file.toPath(), encodeForStorage(timeline));

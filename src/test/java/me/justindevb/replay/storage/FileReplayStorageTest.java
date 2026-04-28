@@ -30,7 +30,6 @@ import static org.mockito.Mockito.*;
 class FileReplayStorageTest {
 
     @Mock private Replay plugin;
-    @Mock private FileConfiguration config;
     @Mock private PluginMeta pluginMeta;
 
     @TempDir
@@ -41,7 +40,6 @@ class FileReplayStorageTest {
     @BeforeEach
     void setUp() {
         when(plugin.getDataFolder()).thenReturn(tempDir);
-        when(plugin.getConfig()).thenReturn(config);
         when(plugin.getPluginMeta()).thenReturn(pluginMeta);
         when(pluginMeta.getVersion()).thenReturn("1.4.0");
         storage = new FileReplayStorage(plugin);
@@ -55,14 +53,10 @@ class FileReplayStorageTest {
         );
     }
 
-    // ── Compressed roundtrip ──────────────────────────────────
+    // ── Binary roundtrip ──────────────────────────────────────
 
     @Nested
-    class CompressedMode {
-        @BeforeEach
-        void enableCompression() {
-            when(config.getBoolean("General.Compress-Replays", true)).thenReturn(true);
-        }
+    class BinaryMode {
 
         @Test
         void saveAndLoad_roundtrip() throws ExecutionException, InterruptedException {
@@ -105,14 +99,10 @@ class FileReplayStorageTest {
         }
     }
 
-    // ── Uncompressed roundtrip ────────────────────────────────
+    // ── Stable save format ────────────────────────────────────
 
     @Nested
-    class UncompressedMode {
-        @BeforeEach
-        void disableCompression() {
-            when(config.getBoolean("General.Compress-Replays", true)).thenReturn(false);
-        }
+    class StableSaveFormat {
 
         @Test
         void saveAndLoad_roundtrip() throws ExecutionException, InterruptedException {
@@ -125,12 +115,13 @@ class FileReplayStorageTest {
         }
 
         @Test
-        void savedFile_hasJsonExtension() throws ExecutionException, InterruptedException {
+        void savedFile_hasBinaryExtension() throws ExecutionException, InterruptedException {
             storage.saveReplay("plainfile", sampleTimeline()).get();
 
             File replayDir = new File(tempDir, "replays");
             assertTrue(new File(replayDir, "plainfile.br").exists());
             assertFalse(new File(replayDir, "plainfile.json.gz").exists());
+            assertFalse(new File(replayDir, "plainfile.json").exists());
         }
     }
 
@@ -138,10 +129,7 @@ class FileReplayStorageTest {
 
     @Test
     void listReplays_bothExtensions() throws ExecutionException, InterruptedException, IOException {
-        when(config.getBoolean("General.Compress-Replays", true)).thenReturn(true);
         storage.saveReplay("compressed1", sampleTimeline()).get();
-
-        when(config.getBoolean("General.Compress-Replays", true)).thenReturn(false);
         storage.saveReplay("uncompressed1", sampleTimeline()).get();
 
         List<String> names = storage.listReplays().get();
@@ -159,7 +147,6 @@ class FileReplayStorageTest {
 
     @Test
     void deleteReplay_existing_returnsTrue() throws ExecutionException, InterruptedException {
-        when(config.getBoolean("General.Compress-Replays", true)).thenReturn(true);
         storage.saveReplay("todelete", sampleTimeline()).get();
 
         assertTrue(storage.deleteReplay("todelete").get());
@@ -176,7 +163,6 @@ class FileReplayStorageTest {
 
     @Test
     void replayExists_true() throws ExecutionException, InterruptedException {
-        when(config.getBoolean("General.Compress-Replays", true)).thenReturn(true);
         storage.saveReplay("exists", sampleTimeline()).get();
 
         assertTrue(storage.replayExists("exists").get());
@@ -191,7 +177,6 @@ class FileReplayStorageTest {
 
     @Test
     void getReplayFile_existing() throws ExecutionException, InterruptedException {
-        when(config.getBoolean("General.Compress-Replays", true)).thenReturn(true);
         storage.saveReplay("filereq", sampleTimeline()).get();
 
         File file = storage.getReplayFile("filereq").get();
@@ -215,12 +200,9 @@ class FileReplayStorageTest {
     // ── Cross-format loading ──────────────────────────────────
 
     @Test
-    void canLoadCompressedAfterSavingCompressed() throws ExecutionException, InterruptedException {
-        when(config.getBoolean("General.Compress-Replays", true)).thenReturn(true);
+    void canLoadBinaryArchiveAfterSavingBinaryArchive() throws ExecutionException, InterruptedException {
         storage.saveReplay("crossformat", sampleTimeline()).get();
 
-        // Even with compression toggled off, should still load binary files saved by the default codec
-        when(config.getBoolean("General.Compress-Replays", true)).thenReturn(false);
         List<TimelineEvent> loaded = storage.loadReplay("crossformat").get();
         assertNotNull(loaded);
         assertEquals(3, loaded.size());
