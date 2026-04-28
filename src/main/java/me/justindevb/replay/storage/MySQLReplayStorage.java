@@ -1,6 +1,7 @@
 package me.justindevb.replay.storage;
 
 import me.justindevb.replay.Replay;
+import me.justindevb.replay.api.ReplayExportQuery;
 import me.justindevb.replay.config.ReplayConfigSetting;
 import me.justindevb.replay.recording.TimelineEvent;
 import me.justindevb.replay.storage.binary.BinaryReplayStorageCodec;
@@ -19,6 +20,7 @@ public class MySQLReplayStorage implements ReplayStorage {
     private final Replay replay;
     private final ReplayStorageCodec saveCodec;
     private final ReplayFormatDetector formatDetector;
+    private final ReplayExporter replayExporter;
 
     public MySQLReplayStorage(DataSource dataSource, Replay replay) {
         this(dataSource, replay, new BinaryReplayStorageCodec(), defaultFormatDetector());
@@ -33,6 +35,7 @@ public class MySQLReplayStorage implements ReplayStorage {
         this.replay = replay;
         this.saveCodec = saveCodec;
         this.formatDetector = formatDetector;
+        this.replayExporter = new ReplayExporter();
         init();
     }
 
@@ -194,6 +197,30 @@ public class MySQLReplayStorage implements ReplayStorage {
                 }
             } catch (Exception e) {
                 replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to get replay file: " + name, e);
+                return null;
+            }
+        });
+    }
+
+    @Override
+    public CompletableFuture<File> getReplayFile(String name, ReplayExportQuery query) {
+        return CompletableFuture.supplyAsync(() -> {
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement ps = conn.prepareStatement("SELECT data FROM replays WHERE name=?")) {
+
+                ps.setString(1, name);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) {
+                        return null;
+                    }
+
+                    byte[] data = rs.getBytes("data");
+                    ReplayStorageCodec codec = formatDetector.detectCodec(name, data);
+                    return replayExporter.exportReplay(name, codec.decodeTimeline(data, replay.getPluginMeta().getVersion()), query,
+                            replay.getPluginMeta().getVersion());
+                }
+            } catch (Exception e) {
+                replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to export replay file: " + name, e);
                 return null;
             }
         });

@@ -3,6 +3,7 @@ package me.justindevb.replay.storage.binary;
 import com.google.gson.Gson;
 import me.justindevb.replay.recording.TimelineEvent;
 import me.justindevb.replay.storage.ReplayFormat;
+import me.justindevb.replay.storage.ReplayIndexedTimeline;
 import me.justindevb.replay.storage.ReplayStorageCodec;
 import me.justindevb.replay.util.VersionUtil;
 import net.jpountz.lz4.LZ4FrameInputStream;
@@ -338,7 +339,7 @@ public final class BinaryReplayStorageCodec implements ReplayStorageCodec {
     ) {
     }
 
-    static final class LazyTimeline extends AbstractList<TimelineEvent> {
+    static final class LazyTimeline extends AbstractList<TimelineEvent> implements ReplayIndexedTimeline {
 
         private final byte[] payload;
         private final List<EventSlice> events;
@@ -370,7 +371,8 @@ public final class BinaryReplayStorageCodec implements ReplayStorageCodec {
             return events.size();
         }
 
-        int findEventIndexAtOrAfterTick(int targetTick) {
+        @Override
+        public int findEventIndexAtOrAfterTick(int targetTick) {
             int candidateIndex = 0;
             if (!tickIndex.isEmpty()) {
                 BinaryTickIndexEntry checkpoint = tickIndex.get(findCheckpointIndex(targetTick));

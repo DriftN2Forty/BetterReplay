@@ -1,5 +1,6 @@
 package me.justindevb.replay.storage;
 
+import me.justindevb.replay.api.ReplayExportQuery;
 import me.justindevb.replay.recording.TimelineEvent;
 
 import java.io.File;
@@ -19,5 +20,9 @@ public interface ReplayStorage {
     CompletableFuture<Boolean> replayExists(String name);
 
     CompletableFuture<File> getReplayFile(String name);
+
+    default CompletableFuture<File> getReplayFile(String name, ReplayExportQuery query) {
+        return getReplayFile(name);
+    }
 }
 

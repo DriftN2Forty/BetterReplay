@@ -1,6 +1,7 @@
 package me.justindevb.replay.storage;
 
 import me.justindevb.replay.Replay;
+import me.justindevb.replay.api.ReplayExportQuery;
 import me.justindevb.replay.recording.TimelineEvent;
 import me.justindevb.replay.storage.binary.BinaryReplayStorageCodec;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -254,6 +255,18 @@ class FileReplayStorageTest {
 
         assertNotNull(exported);
         assertArrayEquals(storedBytes, Files.readAllBytes(exported.toPath()));
+    }
+
+    @Test
+    void filteredExportWritesBoundedBinaryArchive() throws Exception {
+        storage.saveReplay("filtered", sampleTimeline()).get();
+
+        File exported = storage.getReplayFile("filtered", new ReplayExportQuery(null, 5, 10)).get();
+        List<TimelineEvent> filtered = new BinaryReplayStorageCodec().decodeTimeline(Files.readAllBytes(exported.toPath()), "1.4.0");
+
+        assertEquals(2, filtered.size());
+        assertEquals(5, filtered.get(0).tick());
+        assertEquals(10, filtered.get(1).tick());
     }
 
     @Test

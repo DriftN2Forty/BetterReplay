@@ -1,6 +1,7 @@
 package me.justindevb.replay.storage;
 
 import me.justindevb.replay.Replay;
+import me.justindevb.replay.api.ReplayExportQuery;
 import me.justindevb.replay.config.ReplayConfigSetting;
 import me.justindevb.replay.recording.TimelineEvent;
 import me.justindevb.replay.storage.binary.BinaryReplayFormat;
@@ -19,6 +20,7 @@ public class FileReplayStorage implements ReplayStorage {
     private final Replay replay;
     private final ReplayStorageCodec saveCodec;
     private final ReplayFormatDetector formatDetector;
+    private final ReplayExporter replayExporter;
 
     public FileReplayStorage(Replay replay) {
         this(replay, new BinaryReplayStorageCodec(), defaultFormatDetector());
@@ -32,6 +34,7 @@ public class FileReplayStorage implements ReplayStorage {
         this.replay = replay;
         this.saveCodec = saveCodec;
         this.formatDetector = formatDetector;
+        this.replayExporter = new ReplayExporter();
         this.replayFolder = new File(replay.getDataFolder(), "replays");
         if (!replayFolder.exists())
             replayFolder.mkdirs();
@@ -168,6 +171,25 @@ public class FileReplayStorage implements ReplayStorage {
                 return codec.writeReplayFile(name, bytes, replay.getPluginMeta().getVersion());
             } catch (IOException e) {
                 throw new RuntimeException("Failed to get replay file " + name, e);
+            }
+        });
+    }
+
+    @Override
+    public CompletableFuture<File> getReplayFile(String name, ReplayExportQuery query) {
+        return CompletableFuture.supplyAsync(() -> {
+            File file = resolveExisting(name);
+            if (file == null || !file.isFile()) {
+                return null;
+            }
+
+            try {
+                byte[] bytes = Files.readAllBytes(file.toPath());
+                ReplayStorageCodec codec = formatDetector.detectCodec(file.getName(), bytes);
+                return replayExporter.exportReplay(name, codec.decodeTimeline(bytes, replay.getPluginMeta().getVersion()), query,
+                        replay.getPluginMeta().getVersion());
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to export replay file " + name, e);
             }
         });
     }

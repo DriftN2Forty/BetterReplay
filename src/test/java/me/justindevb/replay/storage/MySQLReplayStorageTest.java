@@ -5,6 +5,7 @@ import com.tcoded.folialib.impl.PlatformScheduler;
 import com.tcoded.folialib.wrapper.task.WrappedTask;
 import io.papermc.paper.plugin.configuration.PluginMeta;
 import me.justindevb.replay.Replay;
+import me.justindevb.replay.api.ReplayExportQuery;
 import me.justindevb.replay.recording.TimelineEvent;
 import me.justindevb.replay.storage.binary.BinaryReplayStorageCodec;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -147,6 +148,20 @@ class MySQLReplayStorageTest {
 
         assertNotNull(loaded);
         assertEquals(3, loaded.size());
+    }
+
+    @Test
+    void filteredExportUsesReplayQuery() throws Exception {
+        byte[] archive = new BinaryReplayStorageCodec().finalizeReplay("export-filtered", sampleTimeline(), "1.4.0");
+        when(selectResultSet.next()).thenReturn(true);
+        when(selectResultSet.getBytes("data")).thenReturn(archive);
+
+        File exported = storage.getReplayFile("export-filtered", new ReplayExportQuery(null, 5, 10)).get();
+        List<TimelineEvent> filtered = new BinaryReplayStorageCodec().decodeTimeline(Files.readAllBytes(exported.toPath()), "1.4.0");
+
+        assertEquals(2, filtered.size());
+        assertEquals(5, filtered.get(0).tick());
+        assertEquals(10, filtered.get(1).tick());
     }
 
     private static List<TimelineEvent> sampleTimeline() {
