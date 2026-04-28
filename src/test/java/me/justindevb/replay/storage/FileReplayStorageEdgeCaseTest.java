@@ -180,7 +180,7 @@ class FileReplayStorageEdgeCaseTest {
         void switchFromCompressedToUncompressed_removesGzFile() throws Exception {
             // Save as compressed
             storage.saveReplay("toggle-test", List.of(new TimelineEvent.PlayerQuit(0, "u"))).get();
-            File gzFile = new File(new File(tempDir, "replays"), "toggle-test.json.gz");
+            File gzFile = new File(new File(tempDir, "replays"), "toggle-test.br");
             assertTrue(gzFile.exists());
 
             // Toggle compression off
@@ -188,9 +188,9 @@ class FileReplayStorageEdgeCaseTest {
 
             storage.saveReplay("toggle-test", List.of(new TimelineEvent.PlayerQuit(1, "u"))).get();
 
-            File jsonFile = new File(new File(tempDir, "replays"), "toggle-test.json");
-            assertTrue(jsonFile.exists(), "Uncompressed file should exist");
-            assertFalse(gzFile.exists(), "Old compressed file should be removed");
+            File jsonFile = new File(new File(tempDir, "replays"), "toggle-test.br");
+            assertTrue(jsonFile.exists(), "Binary file should still exist");
+            assertTrue(gzFile.exists(), "Binary storage should ignore compression toggle and keep the same file");
         }
 
         @Test
@@ -198,16 +198,16 @@ class FileReplayStorageEdgeCaseTest {
             when(replay.getConfig().getBoolean("General.Compress-Replays", true)).thenReturn(false);
             storage.saveReplay("toggle2", List.of(new TimelineEvent.PlayerQuit(0, "u"))).get();
 
-            File jsonFile = new File(new File(tempDir, "replays"), "toggle2.json");
+            File jsonFile = new File(new File(tempDir, "replays"), "toggle2.br");
             assertTrue(jsonFile.exists());
 
             // Toggle compression on
             when(replay.getConfig().getBoolean("General.Compress-Replays", true)).thenReturn(true);
             storage.saveReplay("toggle2", List.of(new TimelineEvent.PlayerQuit(1, "u"))).get();
 
-            File gzFile = new File(new File(tempDir, "replays"), "toggle2.json.gz");
-            assertTrue(gzFile.exists(), "Compressed file should exist");
-            assertFalse(jsonFile.exists(), "Old uncompressed file should be removed");
+            File gzFile = new File(new File(tempDir, "replays"), "toggle2.br");
+            assertTrue(gzFile.exists(), "Binary file should exist");
+            assertTrue(jsonFile.exists(), "Binary storage should keep the same archive path after toggling compression");
         }
 
         @Test

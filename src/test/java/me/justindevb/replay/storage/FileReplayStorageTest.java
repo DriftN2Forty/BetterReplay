@@ -82,7 +82,7 @@ class FileReplayStorageTest {
             storage.saveReplay("compressed", sampleTimeline()).get();
 
             File replayDir = new File(tempDir, "replays");
-            File compressed = new File(replayDir, "compressed.json.gz");
+            File compressed = new File(replayDir, "compressed.br");
             assertTrue(compressed.exists());
 
             File plain = new File(replayDir, "compressed.json");
@@ -100,7 +100,7 @@ class FileReplayStorageTest {
             storage.saveReplay("migration", sampleTimeline()).get();
 
             assertFalse(legacy.exists());
-            assertTrue(new File(replayDir, "migration.json.gz").exists());
+            assertTrue(new File(replayDir, "migration.br").exists());
         }
     }
 
@@ -128,7 +128,7 @@ class FileReplayStorageTest {
             storage.saveReplay("plainfile", sampleTimeline()).get();
 
             File replayDir = new File(tempDir, "replays");
-            assertTrue(new File(replayDir, "plainfile.json").exists());
+            assertTrue(new File(replayDir, "plainfile.br").exists());
             assertFalse(new File(replayDir, "plainfile.json.gz").exists());
         }
     }
@@ -218,11 +218,42 @@ class FileReplayStorageTest {
         when(config.getBoolean("General.Compress-Replays", true)).thenReturn(true);
         storage.saveReplay("crossformat", sampleTimeline()).get();
 
-        // Even with compression toggled off, should still load compressed files
+        // Even with compression toggled off, should still load binary files saved by the default codec
         when(config.getBoolean("General.Compress-Replays", true)).thenReturn(false);
         List<TimelineEvent> loaded = storage.loadReplay("crossformat").get();
         assertNotNull(loaded);
         assertEquals(3, loaded.size());
+    }
+
+    @Test
+    void keepsLegacyJsonLoadCompatibilityAlongsideBinarySaves() throws Exception {
+        File replayDir = new File(tempDir, "replays");
+        replayDir.mkdirs();
+        byte[] legacyJson = new JsonReplayStorageCodec().encodeTimeline(sampleTimeline(), "1.4.0");
+        Files.write(new File(replayDir, "legacy.json").toPath(), legacyJson);
+
+        storage.saveReplay("binary-save", sampleTimeline()).get();
+
+        List<TimelineEvent> legacyLoaded = storage.loadReplay("legacy").get();
+        List<TimelineEvent> binaryLoaded = storage.loadReplay("binary-save").get();
+
+        assertNotNull(legacyLoaded);
+        assertEquals(3, legacyLoaded.size());
+        assertNotNull(binaryLoaded);
+        assertEquals(3, binaryLoaded.size());
+        assertTrue(new File(replayDir, "binary-save.br").exists());
+    }
+
+    @Test
+    void exportMatchesBinaryArchiveStoredOnDisk() throws Exception {
+        storage.saveReplay("export-eq", sampleTimeline()).get();
+
+        File replayDir = new File(tempDir, "replays");
+        byte[] storedBytes = Files.readAllBytes(new File(replayDir, "export-eq.br").toPath());
+        File exported = storage.getReplayFile("export-eq").get();
+
+        assertNotNull(exported);
+        assertArrayEquals(storedBytes, Files.readAllBytes(exported.toPath()));
     }
 
     @Test

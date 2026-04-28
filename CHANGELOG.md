@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 3 append-log recording path with CRC32C-framed temp files, incremental string definitions, and streaming recording-session persistence
 - Phase 4 binary replay finalization with append-log recovery scanning, LZ4-compressed `replay.bin` archives, manifest CRC32C checksums, and rebuilt 50-tick seek indexes
 - Phase 5 binary replay loading with `.br` archive detection, manifest version gates, heap decompression, lazy indexed event decode, and seek support from finalized checkpoints
+- Phase 6 backend integration with `.br` saves for file and MySQL storage, MySQL `LONGBLOB` migration, and mixed JSON/binary backend compatibility coverage
 
 ### Fixed
 - `activeSessions` in `RecorderManager` changed to `ConcurrentHashMap` to prevent `ConcurrentModificationException` (#33)

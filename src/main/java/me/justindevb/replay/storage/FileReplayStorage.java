@@ -21,7 +21,7 @@ public class FileReplayStorage implements ReplayStorage {
     private final ReplayFormatDetector formatDetector;
 
     public FileReplayStorage(Replay replay) {
-        this(replay, new JsonReplayStorageCodec(), defaultFormatDetector());
+        this(replay, new BinaryReplayStorageCodec(), defaultFormatDetector());
     }
 
     private static ReplayFormatDetector defaultFormatDetector() {

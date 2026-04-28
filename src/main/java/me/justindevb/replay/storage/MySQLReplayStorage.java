@@ -21,7 +21,7 @@ public class MySQLReplayStorage implements ReplayStorage {
     private final ReplayFormatDetector formatDetector;
 
     public MySQLReplayStorage(DataSource dataSource, Replay replay) {
-        this(dataSource, replay, new JsonReplayStorageCodec(), defaultFormatDetector());
+        this(dataSource, replay, new BinaryReplayStorageCodec(), defaultFormatDetector());
     }
 
     private static ReplayFormatDetector defaultFormatDetector() {
@@ -55,9 +55,11 @@ public class MySQLReplayStorage implements ReplayStorage {
                     CREATE TABLE IF NOT EXISTS replays (
                         name VARCHAR(64) PRIMARY KEY,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        data MEDIUMBLOB NOT NULL
+                        data LONGBLOB NOT NULL
                     )
                 """);
+
+                stmt.executeUpdate("ALTER TABLE replays MODIFY COLUMN data LONGBLOB NOT NULL");
 
             } catch (SQLException e) {
                 replay.getLogger().log(java.util.logging.Level.SEVERE, "Failed to init replay table", e);
